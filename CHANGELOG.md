@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Configuración Netlify**: Archivo `netlify.toml` simplificado para resolver error de parsing
+- **Configuración Netlify**: Archivo `netlify.toml` recreado sin BOM (Byte Order Mark) para resolver error de parsing
+- **Encoding UTF-8**: Archivo creado con encoding puro UTF-8 sin caracteres especiales
 - **Plugin Next.js**: Removido plugin manual para evitar conflicto con configuración UI de Netlify
 
 ## [1.1.0] - 2025-12-31 ✅ RELEASED
