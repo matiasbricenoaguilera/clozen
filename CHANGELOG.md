@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Páginas de autenticación:** Crear páginas `/auth/forgot-password` y `/auth/reset-password`
+- **Error 404:** Solucionar enlace roto de "Olvidaste tu contraseña"
+- **Variables de entorno:** Corregir carga de credenciales de Supabase tras reinicio del servidor
+- **Flujo de recuperación:** Implementar recuperación completa de contraseña con Supabase Auth
+
 ### Deployment
 - **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
 - **Trigger Deploy:** Commit para activar despliegue con credenciales de Supabase
