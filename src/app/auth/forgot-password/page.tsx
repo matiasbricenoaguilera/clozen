@@ -1,6 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+
+// Forzar renderizado dinámico para evitar problemas de prerendering
+export const dynamic = 'force-dynamic'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
