@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Error 404:** Solucionar enlace roto de "Olvidaste tu contraseña"
 - **Variables de entorno:** Corregir carga de credenciales de Supabase tras reinicio del servidor
 - **Flujo de recuperación:** Implementar recuperación completa de contraseña con Supabase Auth
+- **Prerendering Netlify:** Resolver error de prerendering con Suspense boundary para useSearchParams
 
 ### Deployment
 - **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
