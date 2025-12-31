@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Flujo de recuperación:** Implementar recuperación completa de contraseña con Supabase Auth
 - **Prerendering Netlify:** Resolver error de prerendering con Suspense boundary para useSearchParams
 - **Configuración Next.js:** Modificar scripts dev y build para cargar .env.local explícitamente
+- **Tailwind CSS:** Migrar de Tailwind v4 a v3 para resolver errores de construct stylesheets
+- **PostCSS:** Configurar correctamente plugins para compatibilidad con Next.js
+- **Dependencias:** Limpiar y reinstalar node_modules para resolver conflictos de versiones
 
 ### Deployment
 - **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
