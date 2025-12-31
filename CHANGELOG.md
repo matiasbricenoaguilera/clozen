@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deployment
+- **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
+- **Trigger Deploy:** Commit para activar despliegue con credenciales de Supabase
+
 ### Fixed
 - **Configuración Netlify**: Archivo `netlify.toml` recreado sin BOM (Byte Order Mark) para resolver error de parsing
 - **Encoding UTF-8**: Archivo creado con encoding puro UTF-8 sin caracteres especiales
