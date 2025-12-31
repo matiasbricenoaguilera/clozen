@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **NFC Writing Logic:** Corregido error crítico en `writeNFCTag` donde se intentaba escribir antes de detectar el tag NFC
+- **NFC Tag Registry:** Implementado registro centralizado de tags NFC en tabla `nfc_tags` al asignar tags a cajas
+- **NFC Duplicate Validation:** Agregada validación para prevenir asignación de tags NFC duplicados entre cajas y prendas
+- **NFC Tag Cleanup:** Implementada limpieza automática de registros NFC al eliminar cajas
 - **Páginas de autenticación:** Crear páginas `/auth/forgot-password` y `/auth/reset-password`
 - **Error 404:** Solucionar enlace roto de "Olvidaste tu contraseña"
-- **Variables de entorno:** Corregir carga de credenciales de Supabase tras reinicio del servidor
+- **Variables de entorno:** Forzar carga de credenciales con dotenv-cli en scripts de desarrollo
 - **Flujo de recuperación:** Implementar recuperación completa de contraseña con Supabase Auth
 - **Prerendering Netlify:** Resolver error de prerendering con Suspense boundary para useSearchParams
+- **Configuración Next.js:** Modificar scripts dev y build para cargar .env.local explícitamente
 
 ### Deployment
 - **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
