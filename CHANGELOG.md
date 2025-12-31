@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Configuración de Supabase**: Configuración completa de credenciales y conexión a base de datos
+- **Configuración completa de APIs externas**:
+  - OpenAI para recomendaciones IA inteligentes
+  - OpenWeather para datos climáticos
+  - Google Vision para análisis automático de prendas
+- Variables de entorno configuradas para desarrollo local
+- Anon key de Supabase integrada para autenticación y operaciones de base de datos
+
 ## [1.0.0] - 2025-12-31
 
 ### Added
