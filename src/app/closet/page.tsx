@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
@@ -49,6 +49,11 @@ export default function ClosetPage() {
   const [assigningBox, setAssigningBox] = useState(false)
   const [hasEnoughSpace, setHasEnoughSpace] = useState(true)
   const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number } | null>(null)
+
+  // Refs para optimizar escritura rápida de Scanner Keyboard
+  const batchCodesRef = useRef<string>('')
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastChangeTimeRef = useRef<number>(0)
 
   useEffect(() => {
     // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
@@ -439,7 +444,10 @@ export default function ClosetPage() {
 
   // Función optimizada para buscar múltiples prendas por códigos
   const searchBatchGarments = async () => {
-    if (!batchCodes.trim()) {
+    // Usar el valor del ref si está más actualizado (para Scanner Keyboard)
+    const codesToUse = batchCodesRef.current || batchCodes
+    
+    if (!codesToUse.trim()) {
       setNfcError('Ingresa al menos un código')
       return
     }
@@ -450,7 +458,7 @@ export default function ClosetPage() {
 
     try {
       // Separar códigos por "/", espacios, comas, saltos de línea, etc.
-      const codes = batchCodes
+      const codes = codesToUse
         .split(/[/,\n\r\t; ]+/)
         .map(code => normalizeCode(code))
         .filter(code => code.length > 0)
@@ -758,6 +766,7 @@ export default function ClosetPage() {
       await fetchBoxes()
 
       // Limpiar estados
+      batchCodesRef.current = ''
       setBatchCodes('')
       setFoundGarmentsBatch([])
       setSelectedBoxForBatch('')
@@ -788,31 +797,95 @@ export default function ClosetPage() {
     }
   }
 
-  // Manejar pegado de códigos con separador automático
-  const handleBatchCodesPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  // Manejar cambios en el input con optimización para Scanner Keyboard
+  const handleBatchCodesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+    const now = Date.now()
+    const timeSinceLastChange = now - lastChangeTimeRef.current
+    
+    // Detectar si es escritura rápida (Scanner Keyboard) vs escritura normal
+    // Si el cambio es muy grande (>3 caracteres de diferencia) o muy rápido (<50ms), probablemente es Scanner Keyboard
+    const changeSize = Math.abs(newValue.length - batchCodesRef.current.length)
+    const isFastTyping = timeSinceLastChange < 50 && changeSize <= 3
+    
+    // Actualizar la referencia inmediatamente
+    batchCodesRef.current = newValue
+    
+    // Si es escritura muy rápida (Scanner Keyboard), usar debounce para evitar múltiples renders
+    if (isFastTyping) {
+      // Limpiar timer anterior
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+      
+      // Actualizar después de un pequeño delay (cuando termine de escribir)
+      debounceTimerRef.current = setTimeout(() => {
+        setBatchCodes(batchCodesRef.current)
+        debounceTimerRef.current = null
+      }, 200) // 200ms después de que deje de escribir
+    } else {
+      // Para escritura normal o cambios grandes (pegado), actualizar inmediatamente
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+        debounceTimerRef.current = null
+      }
+      setBatchCodes(newValue)
+    }
+    
+    lastChangeTimeRef.current = now
+  }, [])
+
+  // Manejar pegado de códigos con separador automático (optimizado)
+  const handleBatchCodesPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault()
+    e.stopPropagation()
+    
     const pastedText = e.clipboardData.getData('text')
     
-    // Si el texto pegado contiene múltiples líneas o espacios, separarlos
+    // Limpiar cualquier debounce pendiente cuando hay un pegado real
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+    
+    // Procesar el texto pegado
     const codes = pastedText
       .split(/[\n\r\t,; ]+/)
       .map(code => code.trim())
       .filter(code => code.length > 0)
     
+    let newValue: string
     if (codes.length > 1) {
-      // Si hay múltiples códigos, unirlos con "/"
-      const newValue = batchCodes 
+      newValue = batchCodes 
         ? `${batchCodes}/${codes.join('/')}`
         : codes.join('/')
-      setBatchCodes(newValue)
-    } else {
-      // Si es un solo código, agregarlo con "/" si ya hay contenido
-      const newValue = batchCodes && codes.length > 0
+    } else if (codes.length === 1) {
+      newValue = batchCodes && codes[0]
         ? `${batchCodes}/${codes[0]}`
         : codes[0] || ''
-      setBatchCodes(newValue)
+    } else {
+      newValue = batchCodes
     }
-  }
+    
+    batchCodesRef.current = newValue
+    setBatchCodes(newValue)
+    lastChangeTimeRef.current = Date.now()
+  }, [batchCodes])
+
+  // Optimizar el cálculo de códigos detectados
+  const detectedCodesCount = useMemo(() => {
+    if (!batchCodes.trim()) return 0
+    return batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length
+  }, [batchCodes])
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -1155,10 +1228,16 @@ export default function ClosetPage() {
       <Dialog open={showNFCScanner} onOpenChange={(open) => {
         setShowNFCScanner(open)
         if (!open) {
+          batchCodesRef.current = ''
           setBatchCodes('')
           setFoundGarmentsBatch([])
           setSelectedBoxForBatch('')
           setNfcError('')
+          // Limpiar cualquier debounce pendiente
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current)
+            debounceTimerRef.current = null
+          }
         }
       }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1182,8 +1261,35 @@ export default function ClosetPage() {
                   </label>
                   <Input
                     value={batchCodes}
-                    onChange={(e) => setBatchCodes(e.target.value)}
+                    onChange={handleBatchCodesChange}
                     onPaste={handleBatchCodesPaste}
+                    onKeyDown={(e) => {
+                      // Prevenir Enter automático si Scanner Keyboard lo envía
+                      // Solo permitir búsqueda con Enter si el usuario lo presiona explícitamente después de escribir
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        // Si hay texto y no está buscando, buscar inmediatamente usando el ref
+                        // El ref siempre tiene el valor más actualizado
+                        if (batchCodesRef.current.trim() && !searchingBatch) {
+                          // Forzar actualización final del estado antes de buscar
+                          if (debounceTimerRef.current) {
+                            clearTimeout(debounceTimerRef.current)
+                            debounceTimerRef.current = null
+                          }
+                          // Sincronizar el estado con el ref antes de buscar
+                          if (batchCodesRef.current !== batchCodes) {
+                            setBatchCodes(batchCodesRef.current)
+                            // Esperar un momento para que el estado se actualice
+                            setTimeout(() => {
+                              searchBatchGarments()
+                            }, 10)
+                          } else {
+                            // Si ya está sincronizado, buscar inmediatamente
+                            searchBatchGarments()
+                          }
+                        }
+                      }
+                    }}
                     placeholder="Ej: AA:11:22:BB:EE / 123456789 / CC:33:44:DD:FF"
                     className="font-mono text-sm"
                   />
@@ -1192,7 +1298,7 @@ export default function ClosetPage() {
                   </p>
                   {batchCodes && (
                     <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
-                      <strong>Códigos detectados:</strong> {batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length}
+                      <strong>Códigos detectados:</strong> {detectedCodesCount}
                     </div>
                   )}
                 </div>
