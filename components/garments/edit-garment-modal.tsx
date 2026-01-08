@@ -61,6 +61,8 @@ export function EditGarmentModal({
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
+  const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
 
   // Cargar datos de la prenda cuando se abre el modal
   useEffect(() => {
@@ -80,6 +82,84 @@ export function EditGarmentModal({
       setError('')
     }
   }, [garment, open])
+
+  // Función para verificar si un código NFC está duplicado (excluyendo la prenda actual)
+  const checkNfcDuplicate = async (nfcTag: string) => {
+    if (!nfcTag.trim() || !isSupabaseConfigured || !garment) {
+      setNfcDuplicate({ exists: false })
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('nfc_tag_id', nfcTag.trim())
+        .neq('id', garment.id) // Excluir la prenda actual
+        .single()
+
+      if (data && !error) {
+        setNfcDuplicate({ exists: true, garmentName: data.name })
+      } else {
+        setNfcDuplicate({ exists: false })
+      }
+    } catch (error) {
+      // Si no se encuentra, no es duplicado
+      setNfcDuplicate({ exists: false })
+    }
+  }
+
+  // Función para verificar si un código de barras está duplicado (excluyendo la prenda actual)
+  const checkBarcodeDuplicate = async (barcode: string) => {
+    if (!barcode.trim() || !isSupabaseConfigured || !garment) {
+      setBarcodeDuplicate({ exists: false })
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('barcode_id', barcode.trim())
+        .neq('id', garment.id) // Excluir la prenda actual
+        .single()
+
+      if (data && !error) {
+        setBarcodeDuplicate({ exists: true, garmentName: data.name })
+      } else {
+        setBarcodeDuplicate({ exists: false })
+      }
+    } catch (error) {
+      // Si no se encuentra, no es duplicado
+      setBarcodeDuplicate({ exists: false })
+    }
+  }
+
+  // Validar NFC cuando cambia el código
+  useEffect(() => {
+    if (formData.nfc_tag_id && garment) {
+      const timeoutId = setTimeout(() => {
+        checkNfcDuplicate(formData.nfc_tag_id)
+      }, 500) // Debounce de 500ms
+      return () => clearTimeout(timeoutId)
+    } else {
+      setNfcDuplicate({ exists: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.nfc_tag_id, garment?.id])
+
+  // Validar código de barras cuando cambia
+  useEffect(() => {
+    if (formData.barcode_id && garment) {
+      const timeoutId = setTimeout(() => {
+        checkBarcodeDuplicate(formData.barcode_id)
+      }, 500) // Debounce de 500ms
+      return () => clearTimeout(timeoutId)
+    } else {
+      setBarcodeDuplicate({ exists: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.barcode_id, garment?.id])
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -195,6 +275,19 @@ export function EditGarmentModal({
           .getPublicUrl(filePath)
 
         imageUrl = publicUrl
+      }
+
+      // Validar duplicados antes de actualizar
+      if (formData.nfc_tag_id.trim() && nfcDuplicate.exists) {
+        setError(`El código NFC "${formData.nfc_tag_id.trim()}" ya está registrado en la prenda "${nfcDuplicate.garmentName}"`)
+        setSaving(false)
+        return
+      }
+
+      if (formData.barcode_id.trim() && barcodeDuplicate.exists) {
+        setError(`El código de barras "${formData.barcode_id.trim()}" ya está registrado en la prenda "${barcodeDuplicate.garmentName}"`)
+        setSaving(false)
+        return
       }
 
       // Actualizar prenda
@@ -347,7 +440,16 @@ export function EditGarmentModal({
               value={formData.nfc_tag_id}
               onChange={(e) => handleChange('nfc_tag_id', e.target.value)}
               placeholder="ID del tag NFC (opcional)"
+              className="font-mono"
             />
+            {nfcDuplicate.exists && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  ⚠️ Este código NFC ya está registrado en la prenda: <strong>{nfcDuplicate.garmentName}</strong>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <div>
@@ -357,7 +459,16 @@ export function EditGarmentModal({
               value={formData.barcode_id}
               onChange={(e) => handleChange('barcode_id', e.target.value)}
               placeholder="Código de barras (opcional)"
+              className="font-mono"
             />
+            {barcodeDuplicate.exists && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  ⚠️ Este código de barras ya está registrado en la prenda: <strong>{barcodeDuplicate.garmentName}</strong>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <div>
