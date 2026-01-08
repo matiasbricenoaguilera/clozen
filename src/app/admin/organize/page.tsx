@@ -139,7 +139,7 @@ export default function AdminOrganizePage() {
           created_at: new Date().toISOString()
         })
 
-      setSuccess(`✅ Prenda organizada en "${bestBox.name}" (${bestBox.garment_count + 1} prendas ahora)`)
+      setSuccess(`✅ Prenda organizada en "${bestBox.name}" (${(bestBox.garment_count ?? 0) + 1} prendas ahora)`)
 
       // Limpiar y recargar
       setFoundGarment(null)
