@@ -617,36 +617,37 @@ export default function AddGarmentPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 px-4 sm:px-0">
       {!isSupabaseConfigured && <DemoBanner />}
 
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => router.back()}
+          className="self-start"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">Agregar Prenda</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold">Agregar Prenda</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Agrega una nueva prenda a tu closet digital
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="text-sm">{error}</AlertDescription>
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Columna izquierda */}
           <div className="space-y-6">
             {/* Información básica */}
@@ -929,7 +930,7 @@ export default function AddGarmentPage() {
                       Elige cómo quieres asociar un tag NFC a esta prenda:
                     </p>
                     <div className="grid grid-cols-1 gap-2">
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <Button
                           variant="outline"
                           onClick={() => setNfcMode('read')}
@@ -945,7 +946,7 @@ export default function AddGarmentPage() {
                           Crear Nuevo Tag
                         </Button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <Button
                           variant="outline"
                           onClick={() => setNfcMode('manual')}
@@ -979,19 +980,19 @@ export default function AddGarmentPage() {
         </div>
 
         {/* Botones de acción */}
-        <div className="flex gap-4 pt-6">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            className="flex-1"
+            className="w-full sm:flex-1"
           >
             Cancelar
           </Button>
           <Button
             type="submit"
             disabled={saving}
-            className="flex-1"
+            className="w-full sm:flex-1"
           >
             {saving ? (
               <>
@@ -1001,7 +1002,8 @@ export default function AddGarmentPage() {
             ) : (
               <>
                 <Save className="h-4 w-4 mr-2" />
-                Guardar Prenda
+                <span className="hidden sm:inline">Guardar Prenda</span>
+                <span className="sm:hidden">Guardar</span>
               </>
             )}
           </Button>

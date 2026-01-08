@@ -433,48 +433,52 @@ export default function ClosetPage() {
       {!isSupabaseConfigured && <DemoBanner />}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold">
+          <h1 className="text-2xl sm:text-3xl font-bold">
             {userProfile?.role === 'admin' ? 'Closet Familiar' : 'Mi Closet'}
           </h1>
           {userProfile?.role === 'admin' && (
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
               Vista de todas las prendas disponibles de todos los usuarios
             </p>
           )}
-          <div className="flex flex-wrap gap-4 mt-2">
-            <div className="text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-2 sm:gap-4 mt-2">
+            <div className="text-xs sm:text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{filteredGarments.length}</span> prendas disponibles
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-xs sm:text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{forgottenGarments.length}</span> prendas olvidadas
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-xs sm:text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{boxes.length}</span> cajas compartidas
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Link href="/closet/recommendations">
-            <Button variant="outline">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/closet/recommendations" className="flex-1 sm:flex-none">
+            <Button variant="outline" className="w-full sm:w-auto">
               <Sparkles className="h-4 w-4 mr-2" />
-              Recomendaciones
+              <span className="hidden sm:inline">Recomendaciones</span>
+              <span className="sm:hidden">Recom.</span>
             </Button>
           </Link>
           <Button
             variant="outline"
             onClick={() => setShowNFCScanner(true)}
+            className="flex-1 sm:flex-none"
           >
             <Scan className="h-4 w-4 mr-2" />
-            Escanear Prenda
+            <span className="hidden sm:inline">Escanear Prenda</span>
+            <span className="sm:hidden">Escanear</span>
           </Button>
           {/* Solo mostrar botón de agregar si es admin */}
           {userProfile?.role === 'admin' && (
-            <Link href="/closet/add">
-              <Button>
+            <Link href="/closet/add" className="flex-1 sm:flex-none">
+              <Button className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" />
-                Agregar Prenda
+                <span className="hidden sm:inline">Agregar Prenda</span>
+                <span className="sm:hidden">Agregar</span>
               </Button>
             </Link>
           )}
@@ -483,27 +487,27 @@ export default function ClosetPage() {
 
       {/* Weather and Forgotten Garments Section */}
       {userProfile && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-1">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="lg:col-span-1">
             <WeatherCard onWeatherUpdate={setWeather} />
           </div>
-          <div className="md:col-span-2">
+          <div className="lg:col-span-2">
             {/* Forgotten Garments Section */}
             {forgottenGarments.length > 0 && (
-              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                  <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 sm:p-4">
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0"></div>
+                  <h3 className="font-semibold text-sm sm:text-base text-yellow-900 dark:text-yellow-100">
                     🧠 Prendas que quizás olvidaste
                   </h3>
                 </div>
-                <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-300 mb-2 sm:mb-3">
                   Estas prendas no se han usado recientemente. ¡Es hora de darles una segunda oportunidad!
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                   {forgottenGarments.map(garment => (
-                    <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border shadow-sm">
-                      <div className="aspect-square bg-muted rounded mb-2 flex items-center justify-center">
+                    <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-2 sm:p-3 border shadow-sm">
+                      <div className="aspect-square bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
                         {garment.image_url ? (
                           <img
                             src={garment.image_url}
@@ -512,11 +516,11 @@ export default function ClosetPage() {
                             loading="lazy"
                           />
                         ) : (
-                          <Shirt className="h-6 w-6 text-muted-foreground" />
+                          <Shirt className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
                         )}
                       </div>
                       <p className="text-xs font-medium truncate">{garment.name}</p>
-                      <p className="text-xs text-muted-foreground">{garment.type}</p>
+                      <p className="text-xs text-muted-foreground truncate">{garment.type}</p>
                       <Button
                         size="sm"
                         variant={selectedGarments.find(g => g.id === garment.id) ? "default" : "outline"}
@@ -527,17 +531,19 @@ export default function ClosetPage() {
                             handleAddToSearchList(garment.id)
                           }
                         }}
-                        className="w-full mt-2 text-xs"
+                        className="w-full mt-1 sm:mt-2 text-xs h-7 sm:h-8"
                       >
                         {selectedGarments.find(g => g.id === garment.id) ? (
                           <>
                             <Package className="h-3 w-3 mr-1" />
-                            En Lista
+                            <span className="hidden sm:inline">En Lista</span>
+                            <span className="sm:hidden">Lista</span>
                           </>
                         ) : (
                           <>
                             <Plus className="h-3 w-3 mr-1" />
-                            Agregar a Lista
+                            <span className="hidden sm:inline">Agregar</span>
+                            <span className="sm:hidden">+</span>
                           </>
                         )}
                       </Button>
@@ -551,20 +557,20 @@ export default function ClosetPage() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar prendas..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         <select
           value={selectedBox}
           onChange={(e) => setSelectedBox(e.target.value)}
-          className="px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          className="px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-auto sm:min-w-[180px]"
         >
           <option value="">Todas las cajas</option>
           {boxes.map(box => (
@@ -596,7 +602,7 @@ export default function ClosetPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
           {filteredGarments.map(garment => (
             <Card 
               key={garment.id} 
@@ -672,13 +678,13 @@ export default function ClosetPage() {
                 </div>
 
                 {/* Información de uso */}
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-2">
                   <div className="text-xs text-muted-foreground">
                     {garment.usage_count > 0 && (
-                      <span>Usada {garment.usage_count} {garment.usage_count === 1 ? 'vez' : 'veces'}</span>
+                      <span className="block sm:inline">Usada {garment.usage_count} {garment.usage_count === 1 ? 'vez' : 'veces'}</span>
                     )}
                     {garment.last_used && (
-                      <span className="ml-2">
+                      <span className="block sm:inline sm:ml-2">
                         Último uso: {new Date(garment.last_used).toLocaleDateString()}
                       </span>
                     )}
@@ -690,20 +696,22 @@ export default function ClosetPage() {
                       size="sm"
                       variant="default"
                       onClick={() => handleRemoveFromSearchList(garment.id)}
-                      className="text-xs"
+                      className="text-xs w-full sm:w-auto"
                     >
                       <Hand className="h-3 w-3 mr-1" />
-                      En Lista
+                      <span className="hidden sm:inline">En Lista</span>
+                      <span className="sm:hidden">Lista</span>
                     </Button>
                   ) : (
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleAddToSearchList(garment.id)}
-                      className="text-xs"
+                      className="text-xs w-full sm:w-auto"
                     >
                       <Hand className="h-3 w-3 mr-1" />
-                      Agregar a Lista
+                      <span className="hidden sm:inline">Agregar</span>
+                      <span className="sm:hidden">Agregar</span>
                     </Button>
                   )}
                 </div>

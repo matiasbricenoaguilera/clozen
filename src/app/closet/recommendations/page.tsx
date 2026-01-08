@@ -184,18 +184,18 @@ export default function RecommendationsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Sparkles className="h-8 w-8" />
+        <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+          <Sparkles className="h-6 w-6 sm:h-8 sm:w-8" />
           Recomendaciones de Outfits
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-sm sm:text-base text-muted-foreground mt-1 sm:mt-2">
           Sugerencias personalizadas basadas en el clima y tus prendas disponibles
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Clima */}
         <div className="lg:col-span-1">
           <WeatherCard onWeatherUpdate={handleWeatherUpdate} />
@@ -285,7 +285,7 @@ export default function RecommendationsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
                       {rec.garments.map((garment) => (
                         <div
                           key={garment.id}

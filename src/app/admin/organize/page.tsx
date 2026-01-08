@@ -263,10 +263,10 @@ export default function AdminOrganizePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">🏗️ Organizar Ropa Lavada</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl sm:text-3xl font-bold">🏗️ Organizar Ropa Lavada</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
           Escanea prendas después de lavarlas y asigna automáticamente a la caja más apropiada
         </p>
       </div>
@@ -295,26 +295,26 @@ export default function AdminOrganizePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {!scanMode ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <Button 
                 onClick={() => setScanMode('nfc')} 
                 variant="outline" 
                 size="lg"
-                className="h-20 flex-col gap-2"
+                className="h-auto sm:h-20 flex-col gap-2 py-4 sm:py-0"
               >
-                <Smartphone className="h-6 w-6" />
-                <span className="text-lg font-semibold">Escanear NFC</span>
-                <span className="text-xs text-muted-foreground">Usa tu teléfono para leer el tag NFC</span>
+                <Smartphone className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="text-base sm:text-lg font-semibold">Escanear NFC</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">Usa tu teléfono para leer el tag NFC</span>
               </Button>
               <Button 
                 onClick={() => setScanMode('barcode')} 
                 variant="outline" 
                 size="lg"
-                className="h-20 flex-col gap-2"
+                className="h-auto sm:h-20 flex-col gap-2 py-4 sm:py-0"
               >
-                <Scan className="h-6 w-6" />
-                <span className="text-lg font-semibold">Código de Barras</span>
-                <span className="text-xs text-muted-foreground">Ingresa o escanea el código de barras</span>
+                <Scan className="h-5 w-5 sm:h-6 sm:w-6" />
+                <span className="text-base sm:text-lg font-semibold">Código de Barras</span>
+                <span className="text-xs text-muted-foreground hidden sm:inline">Ingresa o escanea el código de barras</span>
               </Button>
             </div>
           ) : (
@@ -372,7 +372,7 @@ export default function AdminOrganizePage() {
           <CardDescription>Distribución actual de prendas en cajas</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {boxes.map(box => {
               const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
               return (
@@ -452,13 +452,13 @@ export default function AdminOrganizePage() {
                   Seleccionar Caja
                 </label>
                 
-                {/* Cajas Recomendadas */}
+                    {/* Cajas Recomendadas */}
                 {getRecommendedBoxes().length > 0 && (
                   <div className="mb-4">
                     <p className="text-xs text-muted-foreground mb-2">
                       💡 Recomendadas (menos del 60% ocupadas):
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {getRecommendedBoxes().slice(0, 4).map(box => {
                         const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
                         return (
@@ -551,7 +551,7 @@ export default function AdminOrganizePage() {
             ) : boxGarments.length === 0 ? (
               <p className="text-muted-foreground text-center py-8">Esta caja está vacía</p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {boxGarments.map((garment: any) => (
                   <Card key={garment.id}>
                     <CardContent className="p-4">
