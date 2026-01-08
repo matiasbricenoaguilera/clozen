@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ingreso manual de NFC**: Opción para ingresar códigos NFC tipo MAC/hexadecimal manualmente
 - **Validación de formato**: Soporte para formatos MAC (XX:XX:XX:XX:XX:XX) y hexadecimal largo
 - **Feedback visual NFC**: Indicadores de carga y estados para operaciones NFC manuales
+- **Optimización completa del closet**: Mejora significativa del rendimiento de carga
+  - Consulta optimizada sin JOIN innecesario
+  - Límite de 100 prendas para mejor rendimiento
+  - Lazy loading de imágenes con fallback automático
+  - Mapa de cajas para acceso O(1)
+  - Estados de carga detallados y paralelos
+  - Indicadores visuales mejorados
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
