@@ -479,14 +479,14 @@ export default function ClosetPage() {
       
       // Agregar prendas encontradas por NFC
       if (garmentsByNfc) {
-        garmentsByNfc.forEach(garment => {
+        garmentsByNfc.forEach((garment: Garment) => {
           allFoundGarments.set(garment.id, garment)
         })
       }
       
       // Agregar prendas encontradas por barcode (sobrescribir si ya existe)
       if (garmentsByBarcode) {
-        garmentsByBarcode.forEach(garment => {
+        garmentsByBarcode.forEach((garment: Garment) => {
           allFoundGarments.set(garment.id, garment)
         })
       }
