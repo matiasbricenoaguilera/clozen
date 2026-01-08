@@ -19,7 +19,10 @@ export default function ClosetPage() {
   const { userProfile, loading: authLoading } = useAuth()
   const [garments, setGarments] = useState<Garment[]>([])
   const [boxes, setBoxes] = useState<Box[]>([])
+  const [boxesMap, setBoxesMap] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
+  const [loadingGarments, setLoadingGarments] = useState(false)
+  const [loadingBoxes, setLoadingBoxes] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedBox, setSelectedBox] = useState<string>('')
   const [showNFCScanner, setShowNFCScanner] = useState(false)
@@ -31,42 +34,44 @@ export default function ClosetPage() {
     if (!isSupabaseConfigured) {
       setGarments([])
       setBoxes([])
+      setBoxesMap(new Map())
       setLoading(false)
       return
     }
 
     // En modo real, esperar a que la autenticación se resuelva
     if (!authLoading && userProfile) {
-      fetchGarments()
-      fetchBoxes()
+      // Ejecutar ambas consultas en paralelo para mejor rendimiento
+      Promise.all([fetchGarments(), fetchBoxes()]).finally(() => {
+        setLoading(false)
+      })
     } else if (!authLoading && !userProfile) {
       // Usuario no autenticado en modo real
       setGarments([])
       setBoxes([])
+      setBoxesMap(new Map())
       setLoading(false)
     }
   }, [userProfile, authLoading, isSupabaseConfigured])
 
   const fetchGarments = async () => {
+    setLoadingGarments(true)
+
     // En modo demo, devolver array vacío
     if (!isSupabaseConfigured) {
       setGarments([])
-      setLoading(false)
+      setLoadingGarments(false)
       return
     }
 
     try {
+      // Optimización: quitar JOIN innecesario y agregar límite
       const { data, error } = await supabase
         .from('garments')
-        .select(`
-          *,
-          boxes (
-            id,
-            name
-          )
-        `)
+        .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, usage_count, created_at')
         .eq('user_id', userProfile?.id)
         .order('created_at', { ascending: false })
+        .limit(100) // Limitar a 100 prendas para mejor rendimiento
 
       if (error) throw error
       setGarments(data || [])
@@ -75,29 +80,45 @@ export default function ClosetPage() {
       // En caso de error, mostrar array vacío
       setGarments([])
     } finally {
-      setLoading(false)
+      setLoadingGarments(false)
     }
   }
 
   const fetchBoxes = async () => {
+    setLoadingBoxes(true)
+
     // En modo demo, devolver array vacío
     if (!isSupabaseConfigured) {
       setBoxes([])
+      setBoxesMap(new Map())
+      setLoadingBoxes(false)
       return
     }
 
     try {
       const { data, error } = await supabase
         .from('boxes')
-        .select('*')
+        .select('id, name')
         .order('name')
 
       if (error) throw error
-      setBoxes(data || [])
+
+      const boxesData = data || []
+      setBoxes(boxesData)
+
+      // Crear mapa para acceso O(1) a nombres de cajas
+      const boxesMapData = new Map<string, string>()
+      boxesData.forEach(box => {
+        boxesMapData.set(box.id, box.name)
+      })
+      setBoxesMap(boxesMapData)
     } catch (error) {
       console.error('Error fetching boxes:', error)
       // En caso de error, mostrar array vacío
       setBoxes([])
+      setBoxesMap(new Map())
+    } finally {
+      setLoadingBoxes(false)
     }
   }
 
@@ -110,8 +131,14 @@ export default function ClosetPage() {
 
   const getBoxName = (boxId: string | null) => {
     if (!boxId) return 'Sin caja'
-    const box = boxes.find(b => b.id === boxId)
-    return box?.name || 'Caja desconocida'
+    return boxesMap.get(boxId) || 'Caja desconocida'
+  }
+
+  // Función para recargar datos (útil para refresh)
+  const refreshData = async () => {
+    setLoading(true)
+    await Promise.all([fetchGarments(), fetchBoxes()])
+    setLoading(false)
   }
 
   const handleNFCScanSuccess = async (tagId: string) => {
@@ -144,9 +171,25 @@ export default function ClosetPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Cargando tu closet...</p>
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <div className="space-y-2">
+            <p className="font-medium">Cargando tu closet...</p>
+            <div className="flex justify-center space-x-4 text-sm text-muted-foreground">
+              {loadingGarments && (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1"></div>
+                  Prendas
+                </span>
+              )}
+              {loadingBoxes && (
+                <span className="flex items-center">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1"></div>
+                  Cajas
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -235,10 +278,17 @@ export default function ClosetPage() {
                       src={garment.image_url}
                       alt={garment.name}
                       className="w-full h-full object-cover rounded-lg"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        // Fallback si la imagen falla
+                        e.currentTarget.style.display = 'none'
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                      }}
                     />
-                  ) : (
-                    <Shirt className="h-8 w-8 text-muted-foreground" />
-                  )}
+                  ) : null}
+                  {/* Fallback icon - visible cuando no hay imagen o falla la carga */}
+                  <Shirt className={`h-8 w-8 text-muted-foreground ${garment.image_url ? 'hidden' : ''}`} />
                 </div>
                 <CardTitle className="text-lg line-clamp-1">{garment.name}</CardTitle>
                 <CardDescription className="flex items-center gap-1">
