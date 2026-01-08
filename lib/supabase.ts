@@ -8,8 +8,17 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.log('🔍 Supabase Config Check:', {
     url: supabaseUrl ? '✅ Configurada' : '❌ No configurada',
     key: supabaseAnonKey ? '✅ Configurada' : '❌ No configurada',
-    urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'N/A'
+    urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'N/A',
+    fullUrl: supabaseUrl || 'NO CONFIGURADA',
+    urlStartsWithHttp: supabaseUrl.startsWith('http'),
+    isConfigured: !!(supabaseUrl && supabaseAnonKey)
   })
+  
+  // Advertencia si la URL no empieza con http
+  if (supabaseUrl && !supabaseUrl.startsWith('http')) {
+    console.error('❌ ERROR: La URL de Supabase debe empezar con https://')
+    console.error('URL actual:', supabaseUrl)
+  }
 }
 
 // Si no hay credenciales, crear un cliente dummy que no haga requests reales

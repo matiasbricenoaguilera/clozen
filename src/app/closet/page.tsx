@@ -11,9 +11,14 @@ import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand } from 'lucide-react'
+import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
-import type { Garment, Box } from '@/types'
+import { WeatherCard } from '@/components/weather/weather-card'
+import { GarmentLocationModal } from '@/components/garments/garment-location-modal'
+import { GarmentSelectionCart } from '@/components/garments/garment-selection-cart'
+import { GarmentSearchList } from '@/components/garments/garment-search-list'
+import { EditGarmentModal } from '@/components/garments/edit-garment-modal'
+import type { Garment, Box, WeatherData } from '@/types'
 
 export default function ClosetPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -29,6 +34,13 @@ export default function ClosetPage() {
   const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
   const [nfcError, setNfcError] = useState('')
   const [forgottenGarments, setForgottenGarments] = useState<Garment[]>([])
+  const [weather, setWeather] = useState<WeatherData | null>(null)
+  const [showLocationModal, setShowLocationModal] = useState(false)
+  const [selectedGarmentForWithdraw, setSelectedGarmentForWithdraw] = useState<Garment | null>(null)
+  const [selectedGarments, setSelectedGarments] = useState<Garment[]>([])
+  const [showSearchList, setShowSearchList] = useState(false)
+  const [editingGarment, setEditingGarment] = useState<Garment | null>(null)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
     // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
@@ -67,14 +79,44 @@ export default function ClosetPage() {
     }
 
     try {
-      // Optimización: incluir nuevos campos y filtrar por status available
-      const { data, error } = await supabase
+      // Si es admin, mostrar todas las prendas disponibles de todos los usuarios
+      // Si es usuario normal, mostrar solo sus prendas
+      const isAdmin = userProfile?.role === 'admin'
+      
+      let query = supabase
         .from('garments')
-        .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at')
-        .eq('user_id', userProfile?.id)
+        .select(`
+          id, 
+          name, 
+          type, 
+          color, 
+          season, 
+          style, 
+          image_url, 
+          box_id, 
+          nfc_tag_id, 
+          barcode_id, 
+          status, 
+          usage_count, 
+          last_used, 
+          created_at,
+          user_id,
+          users:user_id (
+            id,
+            email,
+            full_name
+          )
+        `)
         .eq('status', 'available') // Solo mostrar prendas disponibles
         .order('last_used', { ascending: true, nullsFirst: false }) // Priorizar prendas menos usadas
-        .limit(100)
+        .limit(200) // Aumentar límite para admins
+
+      // Si no es admin, filtrar por su user_id
+      if (!isAdmin) {
+        query = query.eq('user_id', userProfile?.id)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setGarments(data || [])
@@ -149,17 +191,24 @@ export default function ClosetPage() {
     if (!userProfile) return
 
     try {
+      const isAdmin = userProfile.role === 'admin'
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('garments')
         .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at')
-        .eq('user_id', userProfile.id)
         .eq('status', 'available')
-        .or(`last_used.lt.${thirtyDaysAgo.toISOString()},usage_count.lt.3`)
+        .or(`last_used.is.null,last_used.lt.${thirtyDaysAgo.toISOString()},usage_count.lt.3`)
         .order('last_used', { ascending: true, nullsFirst: true })
         .limit(6) // Mostrar top 6 prendas olvidadas
+
+      // Si no es admin, filtrar por su user_id
+      if (!isAdmin) {
+        query = query.eq('user_id', userProfile.id)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setForgottenGarments(data || [])
@@ -169,23 +218,127 @@ export default function ClosetPage() {
     }
   }
 
+  // Función para agregar prenda a la lista de búsqueda
+  const handleAddToSearchList = (garmentId: string) => {
+    const garment = garments.find(g => g.id === garmentId)
+    if (garment && !selectedGarments.find(g => g.id === garmentId)) {
+      setSelectedGarments(prev => [...prev, garment])
+    }
+  }
+
+  // Función para quitar prenda de la lista de búsqueda
+  const handleRemoveFromSearchList = (garmentId: string) => {
+    setSelectedGarments(prev => prev.filter(g => g.id !== garmentId))
+  }
+
+  // Función para confirmar retiro de múltiples prendas
+  const handleConfirmMultipleWithdraw = async (garmentIds: string[]) => {
+    if (!userProfile) return
+
+    try {
+      const updates = garmentIds.map(async (garmentId) => {
+        const garment = selectedGarments.find(g => g.id === garmentId)
+        if (!garment) return
+
+        const isAdmin = userProfile.role === 'admin'
+        
+        // Verificar permisos
+        if (!isAdmin && garment.user_id !== userProfile.id) {
+          console.error('❌ No tienes permiso para retirar esta prenda')
+          return
+        }
+
+        // Obtener usage_count actual
+        const { data: currentGarment, error: fetchError } = await supabase
+          .from('garments')
+          .select('usage_count, user_id')
+          .eq('id', garmentId)
+          .single()
+
+        if (fetchError) throw fetchError
+
+        const newUsageCount = (currentGarment?.usage_count || 0) + 1
+        const garmentOwnerId = currentGarment?.user_id || userProfile.id
+
+        // Actualizar prenda
+        const { error: updateError } = await supabase
+          .from('garments')
+          .update({
+            status: 'in_use',
+            last_used: new Date().toISOString(),
+            usage_count: newUsageCount
+          })
+          .eq('id', garmentId)
+
+        if (updateError) throw updateError
+
+        // Registrar en historial
+        await supabase
+          .from('usage_history')
+          .insert({
+            user_id: garmentOwnerId,
+            garment_id: garmentId,
+            usage_type: 'manual',
+            created_at: new Date().toISOString()
+          })
+      })
+
+      await Promise.all(updates)
+      
+      // Limpiar selección y recargar datos
+      setSelectedGarments([])
+      setShowSearchList(false)
+      await Promise.all([fetchGarments(), fetchForgottenGarments()])
+      
+      console.log('✅ Prendas retiradas exitosamente')
+    } catch (error) {
+      console.error('❌ Error al retirar prendas:', error)
+    }
+  }
+
+  // Función para manejar el clic en "Retirar" - muestra ubicación primero (mantener para compatibilidad)
+  const handleWithdrawClick = (garmentId: string) => {
+    const garment = garments.find(g => g.id === garmentId)
+    if (garment) {
+      setSelectedGarmentForWithdraw(garment)
+      setShowLocationModal(true)
+    }
+  }
+
+  // Función para confirmar el retiro después de mostrar ubicación (mantener para compatibilidad)
+  const confirmWithdraw = async () => {
+    if (selectedGarmentForWithdraw) {
+      await withdrawGarment(selectedGarmentForWithdraw.id)
+      setShowLocationModal(false)
+      setSelectedGarmentForWithdraw(null)
+    }
+  }
+
   // Función para retirar una prenda (marcar como in_use)
   const withdrawGarment = async (garmentId: string) => {
     if (!userProfile) return
 
     try {
-      // 1. Obtener el valor actual de usage_count
+      const isAdmin = userProfile.role === 'admin'
+      
+      // 1. Obtener el valor actual de usage_count y user_id de la prenda
       const { data: currentGarment, error: fetchError } = await supabase
         .from('garments')
-        .select('usage_count')
+        .select('usage_count, user_id')
         .eq('id', garmentId)
-        .eq('user_id', userProfile.id)
         .single()
 
       if (fetchError) throw fetchError
 
+      // Si no es admin, verificar que la prenda pertenezca al usuario
+      if (!isAdmin && currentGarment?.user_id !== userProfile.id) {
+        console.error('❌ No tienes permiso para retirar esta prenda')
+        return
+      }
+
       // 2. Incrementar y actualizar
       const newUsageCount = (currentGarment?.usage_count || 0) + 1
+      const garmentOwnerId = currentGarment?.user_id || userProfile.id
 
       const { error: updateError } = await supabase
         .from('garments')
@@ -195,15 +348,14 @@ export default function ClosetPage() {
           usage_count: newUsageCount
         })
         .eq('id', garmentId)
-        .eq('user_id', userProfile.id)
 
       if (updateError) throw updateError
 
-      // 3. Registrar en historial de uso
+      // 3. Registrar en historial de uso (usar el dueño de la prenda, no el admin)
       await supabase
         .from('usage_history')
         .insert({
-          user_id: userProfile.id,
+          user_id: garmentOwnerId,
           garment_id: garmentId,
           usage_type: 'manual',
           created_at: new Date().toISOString()
@@ -283,7 +435,14 @@ export default function ClosetPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Mi Closet</h1>
+          <h1 className="text-3xl font-bold">
+            {userProfile?.role === 'admin' ? 'Closet Familiar' : 'Mi Closet'}
+          </h1>
+          {userProfile?.role === 'admin' && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Vista de todas las prendas disponibles de todos los usuarios
+            </p>
+          )}
           <div className="flex flex-wrap gap-4 mt-2">
             <div className="text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{filteredGarments.length}</span> prendas disponibles
@@ -297,6 +456,12 @@ export default function ClosetPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Link href="/closet/recommendations">
+            <Button variant="outline">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Recomendaciones
+            </Button>
+          </Link>
           <Button
             variant="outline"
             onClick={() => setShowNFCScanner(true)}
@@ -316,46 +481,71 @@ export default function ClosetPage() {
         </div>
       </div>
 
-      {/* Forgotten Garments Section */}
-      {forgottenGarments.length > 0 && (
-        <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">
-              🧠 Prendas que quizás olvidaste
-            </h3>
+      {/* Weather and Forgotten Garments Section */}
+      {userProfile && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="md:col-span-1">
+            <WeatherCard onWeatherUpdate={setWeather} />
           </div>
-          <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
-            Estas prendas no se han usado recientemente. ¡Es hora de darles una segunda oportunidad!
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {forgottenGarments.map(garment => (
-              <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border shadow-sm">
-                <div className="aspect-square bg-muted rounded mb-2 flex items-center justify-center">
-                  {garment.image_url ? (
-                    <img
-                      src={garment.image_url}
-                      alt={garment.name}
-                      className="w-full h-full object-cover rounded"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <Shirt className="h-6 w-6 text-muted-foreground" />
-                  )}
+          <div className="md:col-span-2">
+            {/* Forgotten Garments Section */}
+            {forgottenGarments.length > 0 && (
+              <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">
+                    🧠 Prendas que quizás olvidaste
+                  </h3>
                 </div>
-                <p className="text-xs font-medium truncate">{garment.name}</p>
-                <p className="text-xs text-muted-foreground">{garment.type}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => withdrawGarment(garment.id)}
-                  className="w-full mt-2 text-xs"
-                >
-                  <Hand className="h-3 w-3 mr-1" />
-                  Usar
-                </Button>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+                  Estas prendas no se han usado recientemente. ¡Es hora de darles una segunda oportunidad!
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {forgottenGarments.map(garment => (
+                    <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border shadow-sm">
+                      <div className="aspect-square bg-muted rounded mb-2 flex items-center justify-center">
+                        {garment.image_url ? (
+                          <img
+                            src={garment.image_url}
+                            alt={garment.name}
+                            className="w-full h-full object-cover rounded"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Shirt className="h-6 w-6 text-muted-foreground" />
+                        )}
+                      </div>
+                      <p className="text-xs font-medium truncate">{garment.name}</p>
+                      <p className="text-xs text-muted-foreground">{garment.type}</p>
+                      <Button
+                        size="sm"
+                        variant={selectedGarments.find(g => g.id === garment.id) ? "default" : "outline"}
+                        onClick={() => {
+                          if (selectedGarments.find(g => g.id === garment.id)) {
+                            handleRemoveFromSearchList(garment.id)
+                          } else {
+                            handleAddToSearchList(garment.id)
+                          }
+                        }}
+                        className="w-full mt-2 text-xs"
+                      >
+                        {selectedGarments.find(g => g.id === garment.id) ? (
+                          <>
+                            <Package className="h-3 w-3 mr-1" />
+                            En Lista
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-3 w-3 mr-1" />
+                            Agregar a Lista
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -408,7 +598,18 @@ export default function ClosetPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredGarments.map(garment => (
-            <Card key={garment.id} className="group cursor-pointer hover:shadow-lg transition-shadow">
+            <Card 
+              key={garment.id} 
+              className={`group hover:shadow-lg transition-shadow ${
+                userProfile?.role === 'admin' ? 'cursor-pointer' : ''
+              }`}
+              onClick={() => {
+                if (userProfile?.role === 'admin') {
+                  setEditingGarment(garment)
+                  setShowEditModal(true)
+                }
+              }}
+            >
               <CardHeader className="pb-3">
                 <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
                   {garment.image_url ? (
@@ -429,9 +630,23 @@ export default function ClosetPage() {
                   <Shirt className={`h-8 w-8 text-muted-foreground ${garment.image_url ? 'hidden' : ''}`} />
                 </div>
                 <CardTitle className="text-lg line-clamp-1">{garment.name}</CardTitle>
-                <CardDescription className="flex items-center gap-1">
-                  <Package className="h-3 w-3" />
-                  {getBoxName(garment.box_id)}
+                <CardDescription className="space-y-1">
+                  <div className="flex items-center gap-1">
+                    <Package className="h-3 w-3" />
+                    <span className="font-medium">{getBoxName(garment.box_id)}</span>
+                    {garment.box_id && boxes.find(b => b.id === garment.box_id)?.location && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({boxes.find(b => b.id === garment.box_id)?.location})
+                      </span>
+                    )}
+                  </div>
+                  {/* Mostrar dueño si es admin */}
+                  {userProfile?.role === 'admin' && (garment as any).users && (
+                    <div className="flex items-center gap-1 text-xs">
+                      <span>👤</span>
+                      <span>{(garment as any).users.full_name || (garment as any).users.email}</span>
+                    </div>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -469,16 +684,28 @@ export default function ClosetPage() {
                     )}
                   </div>
 
-                  {/* Botón de retirar */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => withdrawGarment(garment.id)}
-                    className="text-xs"
-                  >
-                    <Hand className="h-3 w-3 mr-1" />
-                    Retirar
-                  </Button>
+                  {/* Botón de agregar a lista */}
+                  {selectedGarments.find(g => g.id === garment.id) ? (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => handleRemoveFromSearchList(garment.id)}
+                      className="text-xs"
+                    >
+                      <Hand className="h-3 w-3 mr-1" />
+                      En Lista
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleAddToSearchList(garment.id)}
+                      className="text-xs"
+                    >
+                      <Hand className="h-3 w-3 mr-1" />
+                      Agregar a Lista
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -572,6 +799,49 @@ export default function ClosetPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Modal de ubicación de prendas (compatibilidad) */}
+      <GarmentLocationModal
+        open={showLocationModal}
+        onOpenChange={setShowLocationModal}
+        garments={selectedGarmentForWithdraw ? [selectedGarmentForWithdraw] : []}
+        boxes={boxes}
+        onConfirm={confirmWithdraw}
+        confirmLabel="Confirmar Retiro"
+      />
+
+      {/* Panel flotante de selección */}
+      <GarmentSelectionCart
+        selectedGarments={selectedGarments}
+        boxes={boxes}
+        onOpenList={() => setShowSearchList(true)}
+        onRemoveGarment={handleRemoveFromSearchList}
+      />
+
+      {/* Panel lateral de lista de búsqueda */}
+      <GarmentSearchList
+        open={showSearchList}
+        onOpenChange={setShowSearchList}
+        selectedGarments={selectedGarments}
+        boxes={boxes}
+        onConfirm={handleConfirmMultipleWithdraw}
+        onRemoveGarment={handleRemoveFromSearchList}
+        confirmLabel="Confirmar Retiro"
+      />
+
+      {/* Modal de edición de prenda */}
+      {userProfile?.role === 'admin' && (
+        <EditGarmentModal
+          open={showEditModal}
+          onOpenChange={setShowEditModal}
+          garment={editingGarment}
+          boxes={boxes}
+          onSuccess={() => {
+            fetchGarments()
+            setEditingGarment(null)
+          }}
+        />
+      )}
     </div>
   )
 }

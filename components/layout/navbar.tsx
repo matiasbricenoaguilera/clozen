@@ -1,14 +1,30 @@
 'use client'
 
+import { useEffect } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
-import { Shirt, Sun, Moon, LogOut, Settings, Package } from 'lucide-react'
+import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
   const { userProfile, signOut } = useAuth()
+
+  // Log de diagnóstico
+  useEffect(() => {
+    if (userProfile) {
+      console.log('🔍 [Navbar] userProfile:', {
+        id: userProfile.id,
+        email: userProfile.email,
+        role: userProfile.role,
+        full_name: userProfile.full_name
+      })
+      console.log('🔍 [Navbar] ¿Es admin?', userProfile.role === 'admin')
+    } else {
+      console.log('🔍 [Navbar] No hay userProfile')
+    }
+  }, [userProfile])
 
   const handleLogout = async () => {
     await signOut()
@@ -23,6 +39,14 @@ export function Navbar() {
         </Link>
 
         <div className="flex flex-1 items-center justify-end space-x-4">
+          {/* Botón Home - Visible siempre */}
+          <Link href="/">
+            <Button variant="ghost" size="sm">
+              <Home className="h-4 w-4 mr-2" />
+              Home
+            </Button>
+          </Link>
+
           {/* Theme Toggle */}
           <Button
             variant="ghost"
@@ -44,6 +68,12 @@ export function Navbar() {
                   Mi Closet
                 </Button>
               </Link>
+              <Link href="/closet/recommendations">
+                <Button variant="ghost" size="sm">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Recomendaciones
+                </Button>
+              </Link>
 
               {/* Barra de administración - solo visible para admins */}
               {userProfile.role === 'admin' && (
@@ -52,6 +82,12 @@ export function Navbar() {
                     <Button variant="outline" size="sm">
                       <Package className="h-4 w-4 mr-2" />
                       Organizar
+                    </Button>
+                  </Link>
+                  <Link href="/admin/in-use">
+                    <Button variant="outline" size="sm">
+                      <List className="h-4 w-4 mr-2" />
+                      En Uso
                     </Button>
                   </Link>
                   <Link href="/admin/boxes">

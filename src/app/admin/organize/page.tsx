@@ -38,34 +38,49 @@ export default function AdminOrganizePage() {
 
   const loadData = async () => {
     try {
-      // Cargar todas las prendas (de todos los usuarios) que están siendo lavadas o disponibles
+      // Cargar todas las prendas disponibles (solo las que están disponibles, no las en uso)
       const { data: garmentsData, error: garmentsError } = await supabase
         .from('garments')
         .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, user_id, created_at')
-        .in('status', ['available', 'in_use']) // Incluir prendas que podrían estar siendo lavadas
+        .eq('status', 'available') // Solo prendas disponibles
         .order('created_at', { ascending: false })
 
       if (garmentsError) throw garmentsError
 
-      // Cargar cajas con conteo de prendas
+      // Cargar todas las cajas
       const { data: boxesData, error: boxesError } = await supabase
         .from('boxes')
-        .select(`
-          *,
-          garments(count)
-        `)
+        .select('*')
         .order('name')
 
       if (boxesError) throw boxesError
 
-      // Procesar datos de cajas
-      const processedBoxes = (boxesData || []).map((box: any) => ({
-        ...box,
-        garment_count: box.garments?.[0]?.count || 0
-      }))
+      // Obtener conteo real de prendas disponibles por caja
+      const boxesWithCount = await Promise.all(
+        (boxesData || []).map(async (box: any) => {
+          const { count, error: countError } = await supabase
+            .from('garments')
+            .select('*', { count: 'exact', head: true })
+            .eq('box_id', box.id)
+            .eq('status', 'available') // Solo contar prendas disponibles
+          
+          if (countError) {
+            console.error('Error counting garments for box:', box.id, countError)
+            return {
+              ...box,
+              garment_count: 0
+            }
+          }
+          
+          return {
+            ...box,
+            garment_count: count || 0
+          }
+        })
+      )
 
       setGarments(garmentsData || [])
-      setBoxes(processedBoxes)
+      setBoxes(boxesWithCount)
     } catch (error) {
       console.error('Error loading data:', error)
       setError('Error al cargar los datos')
@@ -118,7 +133,7 @@ export default function AdminOrganizePage() {
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
   }
 
-  // Función para cargar prendas de una caja
+  // Función para cargar prendas de una caja (solo disponibles)
   const loadBoxGarments = async (boxId: string) => {
     setLoadingBoxGarments(true)
     try {
@@ -133,6 +148,7 @@ export default function AdminOrganizePage() {
           )
         `)
         .eq('box_id', boxId)
+        .eq('status', 'available') // Solo mostrar prendas disponibles
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -269,6 +285,86 @@ export default function AdminOrganizePage() {
         </Alert>
       )}
 
+      {/* Escáner de Prendas - Sección Principal */}
+      <Card className="border-2">
+        <CardHeader>
+          <CardTitle className="text-2xl">🔍 Incorporar Prenda Lavada</CardTitle>
+          <CardDescription className="text-base">
+            Escanea el código NFC o de barras de la prenda que acabas de lavar para incorporarla a una caja
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!scanMode ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Button 
+                onClick={() => setScanMode('nfc')} 
+                variant="outline" 
+                size="lg"
+                className="h-20 flex-col gap-2"
+              >
+                <Smartphone className="h-6 w-6" />
+                <span className="text-lg font-semibold">Escanear NFC</span>
+                <span className="text-xs text-muted-foreground">Usa tu teléfono para leer el tag NFC</span>
+              </Button>
+              <Button 
+                onClick={() => setScanMode('barcode')} 
+                variant="outline" 
+                size="lg"
+                className="h-20 flex-col gap-2"
+              >
+                <Scan className="h-6 w-6" />
+                <span className="text-lg font-semibold">Código de Barras</span>
+                <span className="text-xs text-muted-foreground">Ingresa o escanea el código de barras</span>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  {scanMode === 'nfc' ? '📱 Código NFC' : '📊 Código de Barras'}
+                </label>
+                <Input
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      findGarment()
+                    }
+                  }}
+                  placeholder={scanMode === 'nfc' ? 'Ej: AA:BB:CC:DD:EE:FF o pega el código aquí' : 'Ej: 1234567890123 o escanea el código'}
+                  className="font-mono text-lg h-12"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {scanMode === 'nfc' 
+                    ? 'Pega el código NFC que leíste con tu aplicación o escáner'
+                    : 'Ingresa el código de barras manualmente o usa un escáner'}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={findGarment} size="lg" className="flex-1">
+                  <Search className="h-4 w-4 mr-2" />
+                  Buscar Prenda
+                </Button>
+                <Button 
+                  onClick={() => { 
+                    setScanMode(null)
+                    setScanInput('')
+                    setFoundGarment(null)
+                    setError('')
+                    setSuccess('')
+                  }} 
+                  variant="outline" 
+                  size="lg"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Estado de Cajas */}
       <Card>
         <CardHeader>
@@ -312,53 +408,6 @@ export default function AdminOrganizePage() {
               )
             })}
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Escáner de Prendas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>🔍 Buscar Prenda</CardTitle>
-          <CardDescription>
-            Escanea o ingresa el código de la prenda que acabas de lavar
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!scanMode ? (
-            <div className="flex gap-4">
-              <Button onClick={() => setScanMode('nfc')} variant="outline">
-                <Smartphone className="h-4 w-4 mr-2" />
-                Escanear NFC
-              </Button>
-              <Button onClick={() => setScanMode('barcode')} variant="outline">
-                <Scan className="h-4 w-4 mr-2" />
-                Código de Barras
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium">
-                  {scanMode === 'nfc' ? 'Código NFC' : 'Código de Barras'}
-                </label>
-                <Input
-                  value={scanInput}
-                  onChange={(e) => setScanInput(e.target.value)}
-                  placeholder={scanMode === 'nfc' ? 'AA:BB:CC:DD:EE:FF' : '1234567890123'}
-                  className="font-mono mt-1"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={findGarment}>
-                  <Search className="h-4 w-4 mr-2" />
-                  Buscar Prenda
-                </Button>
-                <Button onClick={() => { setScanMode(null); setScanInput(''); }} variant="outline">
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
 

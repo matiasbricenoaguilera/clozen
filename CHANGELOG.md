@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Sistema de selección múltiple con lista de búsqueda**: Flujo optimizado para buscar y retirar múltiples prendas
+  - Panel flotante (GarmentSelectionCart) que muestra resumen de prendas seleccionadas
+  - Panel lateral deslizable (GarmentSearchList) con vista detallada de cajas agrupadas
+  - Selección múltiple: usuarios pueden agregar varias prendas a una lista antes de buscar
+  - Marcar como "encontrada": checkboxes para marcar prendas encontradas antes de confirmar
+  - Quitar de lista: botón para remover prendas de la selección antes de confirmar
+  - Ordenamiento inteligente: cajas ordenadas por ubicación física (si existe) o alfabéticamente
+  - Confirmación múltiple: retirar todas las prendas seleccionadas en una sola acción
+  - Indicadores visuales: botones cambian a "En Lista" cuando la prenda está seleccionada
+- **Modal de ubicación de prendas**: Componente que muestra dónde buscar las prendas antes de usarlas
+  - Agrupa prendas por caja para facilitar la búsqueda
+  - Muestra ubicación física de las cajas cuando está disponible
+  - Advertencia para prendas sin caja asignada
+  - Resumen visual de ubicaciones únicas
+- **Optimización de búsqueda de prendas**: Sistema mejorado para identificar dónde están las prendas
+  - Modal de ubicación antes de retirar prendas individuales
+  - Modal de ubicación antes de usar outfits completos
+  - Visualización mejorada de ubicación en tarjetas de prendas (incluye location de caja)
 - **Funcionalidad NFC COMPLETA**: Sistema NFC totalmente operativo para prendas individuales
 - **Diagnóstico avanzado de NFC**: Información detallada sobre compatibilidad y problemas específicos
 - **Generación automática de IDs tipo MAC**: Tags NFC generan identificadores únicos similares a direcciones MAC

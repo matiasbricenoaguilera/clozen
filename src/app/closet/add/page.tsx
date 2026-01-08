@@ -104,16 +104,26 @@ export default function AddGarmentPage() {
     }
 
     try {
+      console.log('🔍 [fetchUsers] Iniciando búsqueda de usuarios...')
+      console.log('🔍 [fetchUsers] Usuario actual:', userProfile?.id, userProfile?.email, userProfile?.role)
+      
       const { data, error } = await supabase
         .from('users')
         .select('id, email, full_name')
         .order('full_name', { ascending: true, nullsFirst: false })
         .order('email', { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error('❌ [fetchUsers] Error de Supabase:', error)
+        throw error
+      }
+      
+      console.log('✅ [fetchUsers] Usuarios encontrados:', data?.length || 0)
+      console.log('📋 [fetchUsers] Lista de usuarios:', data)
+      
       setUsers(data || [])
     } catch (error) {
-      console.error('Error fetching users:', error)
+      console.error('❌ [fetchUsers] Error capturado:', error)
       setUsers([])
     }
   }
@@ -149,6 +159,50 @@ export default function AddGarmentPage() {
       // En caso de error, mostrar array vacío
       setBoxes([])
     }
+  }
+
+  // Función para verificar identificadores duplicados
+  const checkDuplicateIdentifiers = async () => {
+    const checks: Promise<{ type: 'barcode' | 'nfc'; value: string; existing: any } | null>[] = []
+    
+    // Verificar código de barras si existe
+    if (barcodeCode.trim()) {
+      checks.push(
+        supabase
+          .from('garments')
+          .select('id, name, user_id')
+          .eq('barcode_id', barcodeCode.trim())
+          .single()
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (data && !error) {
+              return { type: 'barcode' as const, value: barcodeCode.trim(), existing: data }
+            }
+            return null
+          })
+          .catch(() => null) // Ignorar errores de "no encontrado"
+      )
+    }
+    
+    // Verificar NFC tag si existe
+    if (selectedNfcTag) {
+      checks.push(
+        supabase
+          .from('garments')
+          .select('id, name, user_id')
+          .eq('nfc_tag_id', selectedNfcTag)
+          .single()
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (data && !error) {
+              return { type: 'nfc' as const, value: selectedNfcTag, existing: data }
+            }
+            return null
+          })
+          .catch(() => null) // Ignorar errores de "no encontrado"
+      )
+    }
+    
+    const results = await Promise.all(checks)
+    return results.filter((r): r is { type: 'barcode' | 'nfc'; value: string; existing: any } => r !== null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,6 +298,30 @@ export default function AddGarmentPage() {
         console.log('ℹ️ Sin imagen para subir')
       }
 
+      // Validar identificadores duplicados antes de insertar
+      console.log('🔍 Validando identificadores únicos...')
+      const duplicates = await checkDuplicateIdentifiers()
+      
+      if (duplicates.length > 0) {
+        const duplicate = duplicates[0]
+        let errorMessage = ''
+        
+        if (duplicate.type === 'barcode') {
+          errorMessage = `El código de barras "${duplicate.value}" ya está asignado a otra prenda. Por favor, usa un código diferente o elimina el código de barras.`
+          // Limpiar el código de barras del formulario
+          setBarcodeCode('')
+        } else if (duplicate.type === 'nfc') {
+          errorMessage = `El tag NFC "${duplicate.value}" ya está asignado a otra prenda. Por favor, usa un tag diferente o elimina el tag NFC.`
+          // Limpiar el tag NFC del formulario
+          setSelectedNfcTag('')
+        }
+        
+        console.error('❌ Identificador duplicado:', duplicate)
+        setError(errorMessage)
+        setSaving(false)
+        return
+      }
+
       // Crear prenda
       console.time('👕 Garment Insert Time')
       console.log('💾 Insertando prenda en BD:', {
@@ -275,6 +353,15 @@ export default function AddGarmentPage() {
 
       if (insertError) {
         console.error('❌ Error insertando prenda:', insertError)
+        console.error('❌ Detalles del error:', {
+          code: insertError.code,
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          userId: selectedUserId || userProfile?.id,
+          userRole: userProfile?.role,
+          isAdmin: userProfile?.role === 'admin'
+        })
         throw insertError
       }
 
@@ -313,12 +400,29 @@ export default function AddGarmentPage() {
       router.push('/closet')
     } catch (error: any) {
       console.error('💥 Error en submit:', error)
+      console.error('💥 Detalles del error:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
       console.timeEnd('🕐 Total Submit Time')
 
       // Mejor manejo de errores para el usuario
       let errorMessage = 'Error al guardar la prenda'
 
-      if (error.message?.includes('storage')) {
+      if (error.code === '23505') {
+        // Violación de restricción única
+        if (error.message?.includes('barcode_id')) {
+          errorMessage = 'El código de barras ya está en uso. Por favor, usa un código diferente o elimina el código de barras.'
+          setBarcodeCode('') // Limpiar el campo
+        } else if (error.message?.includes('nfc_tag_id')) {
+          errorMessage = 'El tag NFC ya está en uso. Por favor, usa un tag diferente o elimina el tag NFC.'
+          setSelectedNfcTag('') // Limpiar el campo
+        } else {
+          errorMessage = 'Ya existe una prenda con estos identificadores. Por favor, verifica los códigos NFC o de barras.'
+        }
+      } else if (error.message?.includes('storage')) {
         errorMessage = 'Error al subir la imagen. Verifica el tamaño y conexión.'
       } else if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
         errorMessage = 'Ya existe una prenda con ese código NFC o barras.'
@@ -329,7 +433,6 @@ export default function AddGarmentPage() {
       }
 
       setError(errorMessage)
-    } finally {
       setSaving(false)
     }
   }

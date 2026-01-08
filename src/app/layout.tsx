@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
@@ -17,7 +17,11 @@ export const metadata: Metadata = {
   title: "Clozen - Tu Closet Digital Inteligente",
   description: "Organiza tu ropa con NFC, recomendaciones IA y gestión inteligente de prendas",
   keywords: ["closet", "ropa", "NFC", "IA", "organización", "recomendaciones"],
-  viewport: "width=device-width, initial-scale=1",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   themeColor: "#000000",
 };
 

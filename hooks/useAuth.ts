@@ -54,6 +54,8 @@ export function useAuth() {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      console.log('🔍 [useAuth] Obteniendo perfil para usuario:', userId)
+      
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -61,13 +63,19 @@ export function useAuth() {
         .single()
 
       if (error) {
-        console.warn('Error fetching user profile:', error)
+        console.warn('❌ [useAuth] Error fetching user profile:', error)
         setUserProfile(null)
       } else {
+        console.log('✅ [useAuth] Perfil obtenido:', {
+          id: data.id,
+          email: data.email,
+          role: data.role,
+          full_name: data.full_name
+        })
         setUserProfile(data)
       }
     } catch (error) {
-      console.warn('Error fetching user profile:', error)
+      console.warn('❌ [useAuth] Error fetching user profile:', error)
       setUserProfile(null)
     } finally {
       setLoading(false)
@@ -76,13 +84,31 @@ export function useAuth() {
 
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
+      console.error('❌ [useAuth] signIn: Supabase no está configurado')
       return { data: null, error: { message: 'Supabase no está configurado. Ve a CONFIGURACION.md para instrucciones.' } }
     }
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    return { data, error }
+    
+    console.log('🔍 [useAuth] signIn: Intentando iniciar sesión para:', email)
+    console.log('🔍 [useAuth] signIn: Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('🔍 [useAuth] signIn: Supabase cliente:', supabase ? '✅ Creado' : '❌ No creado')
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      
+      if (error) {
+        console.error('❌ [useAuth] signIn: Error de autenticación:', error)
+      } else {
+        console.log('✅ [useAuth] signIn: Login exitoso')
+      }
+      
+      return { data, error }
+    } catch (err) {
+      console.error('❌ [useAuth] signIn: Excepción capturada:', err)
+      return { data: null, error: { message: `Error de conexión: ${err instanceof Error ? err.message : 'Desconocido'}` } }
+    }
   }
 
   const signUp = async (email: string, password: string, fullName: string) => {
