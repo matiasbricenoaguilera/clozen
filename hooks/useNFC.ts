@@ -9,14 +9,43 @@ export function useNFC() {
   const [isReading, setIsReading] = useState(false)
   const [isWriting, setIsWriting] = useState(false)
 
-  // Verificar si Web NFC está soportado
+  // Verificar si Web NFC está soportado con más detalle
   const checkNFCSupport = useCallback(() => {
-    if ('NDEFReader' in window) {
-      setIsSupported(true)
-      return true
+    // Verificar soporte básico
+    if (!('NDEFReader' in window)) {
+      console.log('❌ Web NFC: NDEFReader no disponible en window')
+      setIsSupported(false)
+      return false
     }
-    setIsSupported(false)
-    return false
+
+    // Verificar HTTPS (requerido para Web NFC)
+    if (typeof window !== 'undefined' && window.location.protocol !== 'https:') {
+      console.log('❌ Web NFC: Se requiere HTTPS, actualmente:', window.location.protocol)
+      setIsSupported(false)
+      return false
+    }
+
+    console.log('✅ Web NFC: Soporte detectado correctamente')
+    setIsSupported(true)
+    return true
+  }, [])
+
+  // Agregar función para obtener información detallada de compatibilidad
+  const getNFCSupportInfo = useCallback(() => {
+    const info = {
+      hasNDEFReader: 'NDEFReader' in window,
+      isHTTPS: typeof window !== 'undefined' && window.location.protocol === 'https:',
+      isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      ),
+      isChromeAndroid: /Chrome/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent),
+      userAgent: navigator.userAgent,
+      protocol: typeof window !== 'undefined' ? window.location.protocol : 'unknown',
+      hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown'
+    }
+
+    console.log('🔍 Información detallada de NFC:', info)
+    return info
   }, [])
 
   // Generar ID tipo MAC desde serial number
@@ -297,6 +326,7 @@ export function useNFC() {
     isReading,
     isWriting,
     checkNFCSupport,
+    getNFCSupportInfo,
     readNFCTag,
     writeNFCTag,
     cancelNFC,

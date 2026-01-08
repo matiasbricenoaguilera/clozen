@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNFC } from '@/hooks/useNFC'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -25,10 +25,17 @@ export function NFCScanner({
   title,
   description
 }: NFCScannerProps) {
-  const { isSupported, isReading, isWriting, readNFCTag, writeNFCTag, cancelNFC } = useNFC()
+  const { isSupported, isReading, isWriting, readNFCTag, writeNFCTag, cancelNFC, getNFCSupportInfo } = useNFC()
   const [status, setStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [detectedTagId, setDetectedTagId] = useState('')
+  const [supportInfo, setSupportInfo] = useState<any>(null)
+
+  useEffect(() => {
+    // Obtener información detallada al montar
+    const info = getNFCSupportInfo()
+    setSupportInfo(info)
+  }, [getNFCSupportInfo])
 
   const handleStartScan = async () => {
     setStatus('scanning')
@@ -77,7 +84,39 @@ export function NFCScanner({
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Web NFC no está soportado en este navegador. Necesitas Chrome para Android para usar NFC.
+          <div className="space-y-2">
+            <p className="font-medium">Web NFC no está disponible</p>
+
+            {supportInfo && (
+              <div className="text-sm space-y-1">
+                {!supportInfo.hasNDEFReader && (
+                  <p>❌ NDEFReader no soportado en este navegador</p>
+                )}
+
+                {!supportInfo.isHTTPS && (
+                  <p>❌ Se requiere HTTPS (actualmente: {supportInfo.protocol})</p>
+                )}
+
+                {!supportInfo.isChromeAndroid && (
+                  <p>⚠️ Recomendado: Chrome en Android</p>
+                )}
+
+                {!supportInfo.isMobile && (
+                  <p>⚠️ Recomendado: Dispositivo móvil</p>
+                )}
+              </div>
+            )}
+
+            <div className="text-xs text-muted-foreground mt-3">
+              <p><strong>Solución:</strong></p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Usa Chrome en Android (versión 89+)</li>
+                <li>Asegúrate de acceder por HTTPS</li>
+                <li>Activa NFC en tu teléfono</li>
+                <li>Para desarrollo local: usa ngrok o similar para HTTPS</li>
+              </ul>
+            </div>
+          </div>
         </AlertDescription>
       </Alert>
     )
