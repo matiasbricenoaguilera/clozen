@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Fix de carga infinita en autenticación**: Corregido problema donde la aplicación se quedaba cargando al iniciar sesión
+  - Agregado timeout de 10 segundos para evitar que la consulta de perfil se quede colgada
+  - Mejorado manejo de errores con logging detallado para diagnóstico
+  - Asegurado que `loading` siempre se establece en `false` incluso si hay errores
+  - Uso de `useCallback` para optimizar `fetchUserProfile` y evitar recreaciones innecesarias
+  - Detección específica de error PGRST116 (usuario no encontrado) con mensaje informativo
+  - Mejor logging en `onAuthStateChange` para rastrear cambios de estado de autenticación
+
 ### Added
 - **Mejoras completas de responsividad**: La aplicación ahora es totalmente responsive en todos los dispositivos
   - Menú hamburguesa móvil en Navbar con navegación adaptativa
