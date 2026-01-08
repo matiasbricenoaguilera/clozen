@@ -37,15 +37,17 @@ export function Navbar() {
           {/* Navigation Links - Show when authenticated */}
           {userProfile && (
             <div className="flex items-center space-x-2">
+              {/* Barra de navegación principal - siempre visible para usuarios autenticados */}
               <Link href="/closet">
                 <Button variant="ghost" size="sm">
+                  <Shirt className="h-4 w-4 mr-2" />
                   Mi Closet
                 </Button>
               </Link>
 
-              {/* Admin Panel - Show only for admins */}
+              {/* Barra de administración - solo visible para admins */}
               {userProfile.role === 'admin' && (
-                <div className="flex gap-2">
+                <>
                   <Link href="/admin/organize">
                     <Button variant="outline" size="sm">
                       <Package className="h-4 w-4 mr-2" />
@@ -58,7 +60,7 @@ export function Navbar() {
                       Cajas
                     </Button>
                   </Link>
-                </div>
+                </>
               )}
             </div>
           )}

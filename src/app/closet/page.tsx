@@ -210,7 +210,10 @@ export default function ClosetPage() {
         })
 
       // 4. Refrescar datos para actualizar la vista
-      await fetchGarments()
+      await Promise.all([
+        fetchGarments(),
+        fetchForgottenGarments() // Actualizar lista de prendas olvidadas
+      ])
 
       console.log('✅ Prenda retirada exitosamente')
     } catch (error) {
