@@ -10,12 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Error CSS @import en Netlify**: Ajustada configuración de Next.js para evitar warnings de @import en producción
 - **Error 401 Supabase en Netlify**: Agregado mejor manejo de variables de entorno y validación de credenciales
+- **Error Node.js version mismatch en Netlify**: Actualizado Node.js a 20.9.0 (Next.js requiere >=20.9.0)
+  - Actualizado `netlify.toml` con `NODE_VERSION = "20.9.0"`
+  - Creado archivo `.nvmrc` con versión 20.9.0 (método recomendado)
+  - Agregado campo `engines` en `package.json` con `node >= 20.9.0` como respaldo
 - **Configuración Netlify**: Ajustado netlify.toml para correcta construcción del proyecto
 - **Debug de variables de entorno**: Agregado logging en desarrollo para verificar configuración de Supabase
 
 ### Changed
 - **next.config.ts**: Simplificada configuración removiendo opciones que el plugin de Netlify maneja automáticamente
 - **lib/supabase.ts**: Mejorada validación de credenciales y agregado debug en desarrollo
+- **package.json**: Agregado campo `engines` para especificar versión de Node.js requerida
 - **Documentación**: Creado SOLUCION_ERRORES_NETLIFY.md con guía completa para resolver errores comunes
 
 ### Fixed
