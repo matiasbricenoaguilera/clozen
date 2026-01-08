@@ -44,6 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Importación faltante**: Agregar Package de lucide-react en navbar
 - **Corrección TypeScript adicional**: Tipado en admin/organize page
 - **Importación Search**: Agregar ícono Search faltante en admin/organize
+- **Optimización formulario prendas**: Logging detallado, compresión de imágenes, operaciones paralelas
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
