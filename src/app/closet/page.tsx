@@ -174,19 +174,32 @@ export default function ClosetPage() {
     if (!userProfile) return
 
     try {
-      const { error } = await supabase
+      // 1. Obtener el valor actual de usage_count
+      const { data: currentGarment, error: fetchError } = await supabase
+        .from('garments')
+        .select('usage_count')
+        .eq('id', garmentId)
+        .eq('user_id', userProfile.id)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // 2. Incrementar y actualizar
+      const newUsageCount = (currentGarment?.usage_count || 0) + 1
+
+      const { error: updateError } = await supabase
         .from('garments')
         .update({
           status: 'in_use',
           last_used: new Date().toISOString(),
-          usage_count: supabase.raw('usage_count + 1')
+          usage_count: newUsageCount
         })
         .eq('id', garmentId)
-        .eq('user_id', userProfile.id) // Solo permitir retirar prendas propias
+        .eq('user_id', userProfile.id)
 
-      if (error) throw error
+      if (updateError) throw updateError
 
-      // Registrar en historial de uso
+      // 3. Registrar en historial de uso
       await supabase
         .from('usage_history')
         .insert({
@@ -196,10 +209,12 @@ export default function ClosetPage() {
           created_at: new Date().toISOString()
         })
 
-      // Refrescar datos para actualizar la vista
+      // 4. Refrescar datos para actualizar la vista
       await fetchGarments()
+
+      console.log('✅ Prenda retirada exitosamente')
     } catch (error) {
-      console.error('Error al retirar prenda:', error)
+      console.error('❌ Error al retirar prenda:', error)
       // Aquí podríamos mostrar un toast de error
     }
   }
