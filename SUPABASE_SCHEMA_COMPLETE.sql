@@ -271,7 +271,46 @@ WHERE table_name = 'garments'
 ORDER BY ordinal_position;
 
 -- =====================================================
--- ✅ PASO 7: VERIFICACIÓN FINAL
+-- 🚀 PASO 7: CREAR ÍNDICES PARA OPTIMIZACIÓN (CRÍTICO PARA RENDIMIENTO)
+-- =====================================================
+
+-- Índice para búsquedas por código NFC
+-- Mejora significativamente las consultas .in('nfc_tag_id', [...])
+CREATE INDEX IF NOT EXISTS idx_garments_nfc_tag_id 
+ON public.garments(nfc_tag_id) 
+WHERE nfc_tag_id IS NOT NULL;
+
+-- Índice para búsquedas por código de barras
+-- Mejora significativamente las consultas .in('barcode_id', [...])
+CREATE INDEX IF NOT EXISTS idx_garments_barcode_id 
+ON public.garments(barcode_id) 
+WHERE barcode_id IS NOT NULL;
+
+-- Índice compuesto para búsquedas NFC con filtro de status
+-- Optimiza consultas que filtran por status y nfc_tag_id
+CREATE INDEX IF NOT EXISTS idx_garments_nfc_status 
+ON public.garments(nfc_tag_id, status) 
+WHERE nfc_tag_id IS NOT NULL;
+
+-- Índice compuesto para búsquedas barcode con filtro de status
+-- Optimiza consultas que filtran por status y barcode_id
+CREATE INDEX IF NOT EXISTS idx_garments_barcode_status 
+ON public.garments(barcode_id, status) 
+WHERE barcode_id IS NOT NULL;
+
+-- Índice para búsquedas por box_id y status (usado en conteos)
+-- Optimiza las consultas de conteo de prendas por caja
+CREATE INDEX IF NOT EXISTS idx_garments_box_status 
+ON public.garments(box_id, status) 
+WHERE box_id IS NOT NULL;
+
+-- Índice para búsquedas por user_id y status
+-- Optimiza las consultas de prendas del usuario
+CREATE INDEX IF NOT EXISTS idx_garments_user_status 
+ON public.garments(user_id, status);
+
+-- =====================================================
+-- ✅ PASO 8: VERIFICACIÓN FINAL
 -- =====================================================
 
 -- Mensaje de confirmación
@@ -285,6 +324,7 @@ BEGIN
     RAISE NOTICE '✅ Políticas RLS configuradas';
     RAISE NOTICE '✅ Schema cache refrescado';
     RAISE NOTICE '✅ Triggers y funciones activas';
+    RAISE NOTICE '✅ Índices de optimización creados';
     RAISE NOTICE '';
     RAISE NOTICE '🚀 ¡Clozen está listo para funcionar completamente!';
     RAISE NOTICE '';

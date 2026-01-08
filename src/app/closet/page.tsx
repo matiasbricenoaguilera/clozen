@@ -469,47 +469,108 @@ export default function ClosetPage() {
       }
 
       console.log('🔍 Buscando códigos (optimizado):', codesToSearch.length)
+      console.time('🔍 Tiempo de búsqueda total')
 
-      // OPTIMIZACIÓN: Ejecutar ambas consultas en paralelo con Promise.all
-      // Seleccionar solo campos necesarios para mejor rendimiento
-      // OPTIMIZACIÓN: Usar una sola consulta con OR cuando sea posible (más eficiente)
-      const [nfcResult, barcodeResult] = await Promise.all([
-        codesToSearch.length > 0 
-          ? supabase
+      // OPTIMIZACIÓN: Si hay pocos códigos (≤10), usar búsquedas individuales (más rápido con índices)
+      // Si hay muchos, usar .in() dividido en chunks para mejor uso de índices
+      let garmentsByNfc: Garment[] = []
+      let garmentsByBarcode: Garment[] = []
+      
+      if (codesToSearch.length <= 10) {
+        // Para pocos códigos: búsquedas individuales en paralelo (más rápido con índices)
+        console.log('⚡ Usando búsquedas individuales (optimizado para pocos códigos)')
+        
+        const nfcQueries = codesToSearch.map(code => 
+          supabase
+            .from('garments')
+            .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
+            .eq('nfc_tag_id', code)
+            .maybeSingle()
+        )
+        
+        const barcodeQueries = codesToSearch.map(code =>
+          supabase
+            .from('garments')
+            .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
+            .eq('barcode_id', code)
+            .maybeSingle()
+        )
+        
+        console.time('⚡ Búsquedas paralelas')
+        const [nfcResults, barcodeResults] = await Promise.all([
+          Promise.all(nfcQueries),
+          Promise.all(barcodeQueries)
+        ])
+        console.timeEnd('⚡ Búsquedas paralelas')
+        
+        garmentsByNfc = nfcResults
+          .map(r => r.data)
+          .filter(Boolean) as Garment[]
+        garmentsByBarcode = barcodeResults
+          .map(r => r.data)
+          .filter(Boolean) as Garment[]
+      } else {
+        // Para muchos códigos: usar .in() con chunks más pequeños para mejor rendimiento
+        console.log('⚡ Usando búsquedas en lote con chunks (optimizado para muchos códigos)')
+        
+        // Dividir en chunks de 20 para mejorar el uso de índices
+        const chunkSize = 20
+        const nfcChunks: Promise<{ data: Garment[] | null; error: any }>[] = []
+        const barcodeChunks: Promise<{ data: Garment[] | null; error: any }>[] = []
+        
+        for (let i = 0; i < codesToSearch.length; i += chunkSize) {
+          const chunk = codesToSearch.slice(i, i + chunkSize)
+          nfcChunks.push(
+            supabase
               .from('garments')
               .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
-              .in('nfc_tag_id', codesToSearch)
-          : Promise.resolve({ data: null, error: null }),
-        codesToSearch.length > 0
-          ? supabase
+              .in('nfc_tag_id', chunk)
+          )
+          barcodeChunks.push(
+            supabase
               .from('garments')
               .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
-              .in('barcode_id', codesToSearch)
-          : Promise.resolve({ data: null, error: null })
-      ])
+              .in('barcode_id', chunk)
+          )
+        }
+        
+        console.time('⚡ Búsquedas en chunks')
+        const [nfcChunkResults, barcodeChunkResults] = await Promise.all([
+          Promise.all(nfcChunks),
+          Promise.all(barcodeChunks)
+        ])
+        console.timeEnd('⚡ Búsquedas en chunks')
+        
+        // Verificar errores en los resultados
+        nfcChunkResults.forEach((result, index) => {
+          if (result.error) {
+            console.error(`Error en chunk NFC ${index}:`, result.error)
+          }
+        })
+        barcodeChunkResults.forEach((result, index) => {
+          if (result.error) {
+            console.error(`Error en chunk Barcode ${index}:`, result.error)
+          }
+        })
+        
+        garmentsByNfc = nfcChunkResults
+          .flatMap(r => r.data || [])
+        garmentsByBarcode = barcodeChunkResults
+          .flatMap(r => r.data || [])
+      }
 
-      const { data: garmentsByNfc, error: nfcError } = nfcResult
-      const { data: garmentsByBarcode, error: barcodeError } = barcodeResult
-
-      if (nfcError) console.error('Error buscando NFC:', nfcError)
-      if (barcodeError) console.error('Error buscando Barcode:', barcodeError)
+      console.timeEnd('🔍 Tiempo de búsqueda total')
 
       // Combinar resultados y eliminar duplicados
       const allFoundGarments = new Map<string, Garment>()
       
-      // Agregar prendas encontradas por NFC
-      if (garmentsByNfc) {
-        garmentsByNfc.forEach((garment: Garment) => {
-          allFoundGarments.set(garment.id, garment)
-        })
-      }
+      garmentsByNfc.forEach((garment: Garment) => {
+        allFoundGarments.set(garment.id, garment)
+      })
       
-      // Agregar prendas encontradas por barcode (sobrescribir si ya existe)
-      if (garmentsByBarcode) {
-        garmentsByBarcode.forEach((garment: Garment) => {
-          allFoundGarments.set(garment.id, garment)
-        })
-      }
+      garmentsByBarcode.forEach((garment: Garment) => {
+        allFoundGarments.set(garment.id, garment)
+      })
 
       const foundGarments = Array.from(allFoundGarments.values())
       
@@ -529,7 +590,9 @@ export default function ClosetPage() {
       console.log('📊 Resumen de búsqueda (optimizado):', {
         totalCodes: codes.length,
         found: foundGarments.length,
-        notFound: notFoundCodes.length
+        notFound: notFoundCodes.length,
+        nfcFound: garmentsByNfc.length,
+        barcodeFound: garmentsByBarcode.length
       })
 
       setFoundGarmentsBatch(foundGarments)
