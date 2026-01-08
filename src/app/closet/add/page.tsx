@@ -41,6 +41,8 @@ export default function AddGarmentPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [nfcMode, setNfcMode] = useState<'read' | 'write' | null>(null)
+  const [selectedNfcTag, setSelectedNfcTag] = useState<string>('')
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -123,7 +125,7 @@ export default function AddGarmentPage() {
       }
 
       // Crear prenda
-      const { error: insertError } = await supabase
+      const { data: garmentData, error: insertError } = await supabase
         .from('garments')
         .insert({
           user_id: userProfile.id,
@@ -133,10 +135,29 @@ export default function AddGarmentPage() {
           style: formData.style,
           image_url: imageUrl,
           box_id: formData.boxId || null,
-          nfc_tag_id: null // TODO: Implementar NFC para prendas individuales
+          nfc_tag_id: selectedNfcTag || null
         })
+        .select()
+        .single()
 
       if (insertError) throw insertError
+
+      // Registrar el tag NFC en la tabla nfc_tags si existe
+      if (selectedNfcTag && garmentData) {
+        const { error: nfcError } = await supabase
+          .from('nfc_tags')
+          .insert({
+            tag_id: selectedNfcTag,
+            entity_type: 'garment',
+            entity_id: garmentData.id,
+            created_by: userProfile.id
+          })
+
+        if (nfcError) {
+          console.error('Error registrando tag NFC:', nfcError)
+          // No lanzamos error aquí para no bloquear el guardado de la prenda
+        }
+      }
 
       router.push('/closet')
     } catch (error: any) {
@@ -155,8 +176,17 @@ export default function AddGarmentPage() {
   }
 
   const handleNFCRead = (tagId: string) => {
-    // TODO: Implementar asignación NFC a prendas
-    console.log('Tag NFC leído:', tagId)
+    setSelectedNfcTag(tagId)
+    setNfcMode(null) // Cerrar el scanner después de leer
+  }
+
+  const handleNFCError = (error: string) => {
+    setError(`Error NFC: ${error}`)
+  }
+
+  const handleClearNfcTag = () => {
+    setSelectedNfcTag('')
+    setNfcMode(null)
   }
 
   const toggleStyle = (style: string) => {
@@ -328,18 +358,81 @@ export default function AddGarmentPage() {
               </CardContent>
             </Card>
 
-            {/* NFC (futuro) */}
+            {/* NFC */}
             <Card>
               <CardHeader>
-                <CardTitle>Tag NFC (Próximamente)</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  Tag NFC
+                  {selectedNfcTag && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearNfcTag}
+                    >
+                      Limpiar
+                    </Button>
+                  )}
+                </CardTitle>
                 <CardDescription>
-                  Podrás asignar un tag NFC individual a esta prenda
+                  Asocia un tag NFC a esta prenda para identificarla fácilmente
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="text-center py-8 text-muted-foreground">
-                  <p className="text-sm">Funcionalidad próximamente disponible</p>
-                </div>
+              <CardContent className="space-y-4">
+                {selectedNfcTag ? (
+                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <div>
+                        <p className="font-medium text-green-900 dark:text-green-100">
+                          Tag NFC Asociado
+                        </p>
+                        <p className="text-sm text-green-700 dark:text-green-300 font-mono">
+                          {selectedNfcTag}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : nfcMode ? (
+                  <NFCScanner
+                    mode={nfcMode}
+                    onSuccess={handleNFCRead}
+                    onError={handleNFCError}
+                    expectedTagId={nfcMode === 'write' ? '' : undefined}
+                    title={nfcMode === 'read' ? 'Escanear Tag Existente' : 'Crear Nuevo Tag'}
+                    description={
+                      nfcMode === 'read'
+                        ? 'Acércate un tag NFC que ya contenga un ID para asociarlo a esta prenda'
+                        : 'Acércate un tag NFC en blanco para escribir un nuevo ID único'
+                    }
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Elige cómo quieres asociar un tag NFC a esta prenda:
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setNfcMode('read')}
+                        className="flex-1"
+                      >
+                        Escanear Tag Existente
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => setNfcMode('write')}
+                        className="flex-1"
+                      >
+                        Crear Nuevo Tag
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      • <strong>Escanear:</strong> Lee un tag que ya tenga información
+                      <br />
+                      • <strong>Crear:</strong> Genera un nuevo ID y lo escribe en un tag vacío
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

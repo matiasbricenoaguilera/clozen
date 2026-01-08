@@ -9,7 +9,10 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
-import { Plus, Search, Shirt, Package, Filter } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { NFCScanner } from '@/components/nfc/nfc-scanner'
+import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan } from 'lucide-react'
+import { findEntityByNFCTag } from '@/utils/nfc'
 import type { Garment, Box } from '@/types'
 
 export default function ClosetPage() {
@@ -19,6 +22,9 @@ export default function ClosetPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedBox, setSelectedBox] = useState<string>('')
+  const [showNFCScanner, setShowNFCScanner] = useState(false)
+  const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
+  const [nfcError, setNfcError] = useState('')
 
   useEffect(() => {
     // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
@@ -108,6 +114,33 @@ export default function ClosetPage() {
     return box?.name || 'Caja desconocida'
   }
 
+  const handleNFCScanSuccess = async (tagId: string) => {
+    try {
+      const result = await findEntityByNFCTag(tagId)
+      if (result && result.entityType === 'garment') {
+        setFoundGarment(result.entity as Garment)
+        setShowNFCScanner(false)
+        setNfcError('')
+      } else if (result && result.entityType === 'box') {
+        setNfcError(`Este tag pertenece a la caja "${result.entityName}". Solo puedes escanear prendas desde aquí.`)
+      } else {
+        setNfcError('No se encontró ninguna prenda asociada a este tag NFC.')
+      }
+    } catch (error) {
+      console.error('Error finding garment by NFC:', error)
+      setNfcError('Error al buscar la prenda. Inténtalo de nuevo.')
+    }
+  }
+
+  const handleNFCScanError = (error: string) => {
+    setNfcError(error)
+  }
+
+  const closeFoundGarmentDialog = () => {
+    setFoundGarment(null)
+    setNfcError('')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -131,12 +164,21 @@ export default function ClosetPage() {
             {filteredGarments.length} prendas en total
           </p>
         </div>
-        <Link href="/closet/add">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Agregar Prenda
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowNFCScanner(true)}
+          >
+            <Scan className="h-4 w-4 mr-2" />
+            Escanear Prenda
           </Button>
-        </Link>
+          <Link href="/closet/add">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar Prenda
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -207,6 +249,12 @@ export default function ClosetPage() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">{garment.type}</Badge>
+                  {garment.nfc_tag_id && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Smartphone className="h-3 w-3" />
+                      NFC
+                    </Badge>
+                  )}
                   {garment.color && (
                     <Badge variant="outline">{garment.color}</Badge>
                   )}
@@ -224,6 +272,93 @@ export default function ClosetPage() {
           ))}
         </div>
       )}
+
+      {/* NFC Scanner Dialog */}
+      <Dialog open={showNFCScanner} onOpenChange={setShowNFCScanner}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escanear Prenda NFC</DialogTitle>
+            <DialogDescription>
+              Acércate un tag NFC de una prenda para identificarla
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <NFCScanner
+              mode="read"
+              onSuccess={handleNFCScanSuccess}
+              onError={handleNFCScanError}
+              title="Escanear Tag NFC"
+              description="Acércate el tag NFC de la prenda que quieres identificar"
+            />
+            {nfcError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Found Garment Dialog */}
+      <Dialog open={!!foundGarment} onOpenChange={closeFoundGarmentDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5" />
+              ¡Prenda Encontrada!
+            </DialogTitle>
+            <DialogDescription>
+              Esta prenda está asociada al tag NFC escaneado
+            </DialogDescription>
+          </DialogHeader>
+          {foundGarment && (
+            <div className="space-y-4">
+              <div className="flex gap-4">
+                <div className="aspect-square w-24 bg-muted rounded-lg flex items-center justify-center">
+                  {foundGarment.image_url ? (
+                    <img
+                      src={foundGarment.image_url}
+                      alt={foundGarment.name}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  ) : (
+                    <Shirt className="h-8 w-8 text-muted-foreground" />
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <h3 className="font-semibold text-lg">{foundGarment.name}</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{foundGarment.type}</Badge>
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Smartphone className="h-3 w-3" />
+                      NFC: {foundGarment.nfc_tag_id}
+                    </Badge>
+                    {foundGarment.color && (
+                      <Badge variant="outline">{foundGarment.color}</Badge>
+                    )}
+                    {foundGarment.season && (
+                      <Badge variant="outline">{foundGarment.season}</Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    En: {getBoxName(foundGarment.box_id)}
+                  </p>
+                  {foundGarment.usage_count > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Usada {foundGarment.usage_count} {foundGarment.usage_count === 1 ? 'vez' : 'veces'}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button onClick={closeFoundGarmentDialog} className="flex-1">
+                  Cerrar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

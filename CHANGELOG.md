@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Funcionalidad NFC COMPLETA**: Sistema NFC totalmente operativo para prendas individuales
+- **Generación automática de IDs tipo MAC**: Tags NFC generan identificadores únicos similares a direcciones MAC
+- **Validación de tags duplicados**: Prevención de asignación de tags NFC ya asociados a otras prendas/cajas
+- **Escáner NFC integrado**: Componente funcional en formulario de agregar prendas con modos lectura/escritura
+- **Indicadores NFC visuales**: Badges NFC en tarjetas de prendas para identificar prendas con tags asociados
+- **Escáner de prendas desde closet**: Botón para escanear e identificar prendas existentes por NFC
+- **Registro automático en base de datos**: Tags NFC se registran automáticamente en tabla `nfc_tags`
+- **Utilidades NFC completas**: Librería de funciones para gestión completa de tags NFC
+
+### Changed
+- **Hook useNFC mejorado**: Agregada generación de IDs tipo MAC, validación de duplicados y funciones de utilidad
+- **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
+- **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
+- **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
+
 ### Fixed
 - **Error CSS @import en Netlify**: Ajustada configuración de Next.js para evitar warnings de @import en producción
 - **Error 401 Supabase en Netlify**: Agregado mejor manejo de variables de entorno y validación de credenciales
