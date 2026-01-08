@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deployment
 - **Netlify Variables:** Configuración de variables de entorno en Netlify para producción
 - **Trigger Deploy:** Commit para activar despliegue con credenciales de Supabase
+- **Configuración Netlify completa:**
+  - Actualizado `netlify.toml` con plugin oficial de Next.js (`@netlify/plugin-nextjs`)
+  - Configuración optimizada para Next.js 16 en Netlify
+  - Scripts de build actualizados: `build` para producción (Netlify), `build:local` para desarrollo local
+  - Removido `dotenv-cli` del comando build de producción (Netlify maneja variables automáticamente)
+  - Agregado plugin `@netlify/plugin-nextjs` como dependencia dev
+  - Documentación completa de despliegue en Netlify agregada a `CONFIGURACION.md`
 
 ### Fixed
 - **Configuración Netlify**: Archivo `netlify.toml` recreado sin BOM (Byte Order Mark) para resolver error de parsing

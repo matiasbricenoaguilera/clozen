@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "dotenv -e .env.local -- next dev",
-    "build": "dotenv -e .env.local -- next build",
+    "build": "next build",
+    "build:local": "dotenv -e .env.local -- next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -30,6 +31,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.15.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -39,7 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.18",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5"
   }
 }
