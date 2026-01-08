@@ -49,6 +49,8 @@ export default function AddGarmentPage() {
   const [accessDenied, setAccessDenied] = useState(false) // Estado para acceso denegado
   const [users, setUsers] = useState<Array<{ id: string; email: string; full_name: string | null }>>([])
   const [selectedUserId, setSelectedUserId] = useState<string>('') // Usuario seleccionado para la prenda
+  const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
+  const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -160,6 +162,80 @@ export default function AddGarmentPage() {
       setBoxes([])
     }
   }
+
+  // Función para verificar si un código NFC está duplicado
+  const checkNfcDuplicate = async (nfcTag: string) => {
+    if (!nfcTag.trim() || !isSupabaseConfigured) {
+      setNfcDuplicate({ exists: false })
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('nfc_tag_id', nfcTag.trim())
+        .single()
+
+      if (data && !error) {
+        setNfcDuplicate({ exists: true, garmentName: data.name })
+      } else {
+        setNfcDuplicate({ exists: false })
+      }
+    } catch (error) {
+      // Si no se encuentra, no es duplicado
+      setNfcDuplicate({ exists: false })
+    }
+  }
+
+  // Función para verificar si un código de barras está duplicado
+  const checkBarcodeDuplicate = async (barcode: string) => {
+    if (!barcode.trim() || !isSupabaseConfigured) {
+      setBarcodeDuplicate({ exists: false })
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('barcode_id', barcode.trim())
+        .single()
+
+      if (data && !error) {
+        setBarcodeDuplicate({ exists: true, garmentName: data.name })
+      } else {
+        setBarcodeDuplicate({ exists: false })
+      }
+    } catch (error) {
+      // Si no se encuentra, no es duplicado
+      setBarcodeDuplicate({ exists: false })
+    }
+  }
+
+  // Validar NFC cuando cambia el código
+  useEffect(() => {
+    if (selectedNfcTag) {
+      const timeoutId = setTimeout(() => {
+        checkNfcDuplicate(selectedNfcTag)
+      }, 500) // Debounce de 500ms
+      return () => clearTimeout(timeoutId)
+    } else {
+      setNfcDuplicate({ exists: false })
+    }
+  }, [selectedNfcTag])
+
+  // Validar código de barras cuando cambia
+  useEffect(() => {
+    if (barcodeCode.trim()) {
+      const timeoutId = setTimeout(() => {
+        checkBarcodeDuplicate(barcodeCode)
+      }, 500) // Debounce de 500ms
+      return () => clearTimeout(timeoutId)
+    } else {
+      setBarcodeDuplicate({ exists: false })
+    }
+  }, [barcodeCode])
 
   // Función para verificar identificadores duplicados
   const checkDuplicateIdentifiers = async () => {
@@ -445,9 +521,11 @@ export default function AddGarmentPage() {
     setSelectedImage(null)
   }
 
-  const handleNFCRead = (tagId: string) => {
+  const handleNFCRead = async (tagId: string) => {
     setSelectedNfcTag(tagId)
     setNfcMode(null) // Cerrar el scanner después de leer
+    // Validar inmediatamente después de leer
+    await checkNfcDuplicate(tagId)
   }
 
   const handleNFCError = (error: string) => {
@@ -520,17 +598,35 @@ export default function AddGarmentPage() {
     setError('')
 
     try {
+      // Validar duplicado antes de procesar
+      await checkBarcodeDuplicate(barcodeCode.trim())
+      
+      // Esperar un momento para que el estado se actualice
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Verificar el estado actualizado
+      const { data } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('barcode_id', barcodeCode.trim())
+        .single()
+
+      if (data) {
+        setError(`El código de barras "${barcodeCode.trim()}" ya está registrado en la prenda "${data.name}"`)
+        setAssociatingNfc(false)
+        return
+      }
+
       // Simular procesamiento
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Aquí podríamos validar que el barcode no existe, pero por simplicidad
-      // lo asignamos directamente. El barcode se puede usar para identificar prendas
-      // en procesos futuros (como organización post-lavado)
       console.log('Código de barras registrado:', barcodeCode.trim())
-      setBarcodeCode('')
+      // No limpiar el código aquí, se mantiene para mostrar el aviso
       setNfcMode(null)
     } catch (error) {
-      setError('Error al procesar el código de barras')
+      // Si no se encuentra, no es duplicado, continuar
+      console.log('Código de barras registrado:', barcodeCode.trim())
+      setNfcMode(null)
     } finally {
       setAssociatingNfc(false)
     }
@@ -565,9 +661,10 @@ export default function AddGarmentPage() {
       // Simular un pequeño delay para mejor UX y feedback visual
       await new Promise(resolve => setTimeout(resolve, 500))
 
-      // Aquí podríamos verificar si el tag ya existe, pero por simplicidad
-      // lo permitiremos y dejaremos que la base de datos maneje la validación
-      setSelectedNfcTag(manualNfcCode.trim().toUpperCase())
+      const nfcCode = manualNfcCode.trim().toUpperCase()
+      // Validar antes de asignar
+      await checkNfcDuplicate(nfcCode)
+      setSelectedNfcTag(nfcCode)
       setManualNfcCode('')
       setNfcMode(null)
     } catch (error) {
@@ -830,18 +927,28 @@ export default function AddGarmentPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {selectedNfcTag ? (
-                  <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                      <div>
-                        <p className="font-medium text-green-900 dark:text-green-100">
-                          Tag NFC Asociado
-                        </p>
-                        <p className="text-sm text-green-700 dark:text-green-300 font-mono">
-                          {selectedNfcTag}
-                        </p>
+                  <div className="space-y-3">
+                    <div className="p-4 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <div>
+                          <p className="font-medium text-green-900 dark:text-green-100">
+                            Tag NFC Asociado
+                          </p>
+                          <p className="text-sm text-green-700 dark:text-green-300 font-mono">
+                            {selectedNfcTag}
+                          </p>
+                        </div>
                       </div>
                     </div>
+                    {nfcDuplicate.exists && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          ⚠️ Este código NFC ya está registrado en la prenda: <strong>{nfcDuplicate.garmentName}</strong>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
                 ) : nfcMode === 'manual' ? (
                   <div className="space-y-4">
@@ -898,6 +1005,14 @@ export default function AddGarmentPage() {
                         Ingresa el código de barras de la etiqueta de la prenda. Este código se usará para identificar la prenda durante la organización post-lavado.
                       </p>
                     </div>
+                    {barcodeDuplicate.exists && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          ⚠️ Este código de barras ya está registrado en la prenda: <strong>{barcodeDuplicate.garmentName}</strong>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <div className="flex gap-2">
                       <Button onClick={handleBarcodeSubmit} className="flex-1">
                         Registrar Código
