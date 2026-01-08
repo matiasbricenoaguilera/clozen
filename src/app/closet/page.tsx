@@ -10,8 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles } from 'lucide-react'
+import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
 import { WeatherCard } from '@/components/weather/weather-card'
 import { GarmentLocationModal } from '@/components/garments/garment-location-modal'
@@ -41,6 +42,13 @@ export default function ClosetPage() {
   const [showSearchList, setShowSearchList] = useState(false)
   const [editingGarment, setEditingGarment] = useState<Garment | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [batchCodes, setBatchCodes] = useState<string>('')
+  const [foundGarmentsBatch, setFoundGarmentsBatch] = useState<Garment[]>([])
+  const [searchingBatch, setSearchingBatch] = useState(false)
+  const [selectedBoxForBatch, setSelectedBoxForBatch] = useState<string>('')
+  const [assigningBox, setAssigningBox] = useState(false)
+  const [hasEnoughSpace, setHasEnoughSpace] = useState(true)
+  const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number } | null>(null)
 
   useEffect(() => {
     // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
@@ -148,7 +156,25 @@ export default function ClosetPage() {
 
       if (error) throw error
 
-      const boxesData: Box[] = data || []
+      // Obtener conteo de prendas por caja
+      const boxesWithCount = await Promise.all(
+        (data || []).map(async (box: any) => {
+          const { count, error: countError } = await supabase
+            .from('garments')
+            .select('*', { count: 'exact', head: true })
+            .eq('box_id', box.id)
+            .eq('status', 'available')
+          
+          if (countError) {
+            console.error('Error counting garments for box:', box.id, countError)
+            return { ...box, garment_count: 0 }
+          }
+          
+          return { ...box, garment_count: count || 0 }
+        })
+      )
+
+      const boxesData: Box[] = boxesWithCount
       setBoxes(boxesData)
 
       // Crear mapa para acceso O(1) a nombres de cajas
@@ -401,6 +427,310 @@ export default function ClosetPage() {
     setNfcError('')
   }
 
+  // Función para normalizar códigos (igual que cuando se guardan)
+  const normalizeCode = (code: string): string => {
+    return code.trim().toUpperCase()
+  }
+
+  // Función optimizada para buscar múltiples prendas por códigos
+  const searchBatchGarments = async () => {
+    if (!batchCodes.trim()) {
+      setNfcError('Ingresa al menos un código')
+      return
+    }
+
+    setSearchingBatch(true)
+    setNfcError('')
+    setFoundGarmentsBatch([])
+
+    try {
+      // Separar códigos por "/", espacios, comas, saltos de línea, etc.
+      const codes = batchCodes
+        .split(/[/,\n\r\t; ]+/)
+        .map(code => normalizeCode(code))
+        .filter(code => code.length > 0)
+
+      if (codes.length === 0) {
+        setNfcError('No se encontraron códigos válidos')
+        setSearchingBatch(false)
+        return
+      }
+
+      console.log('🔍 Buscando códigos (optimizado):', codes.length)
+
+      // OPTIMIZACIÓN: Buscar todas las prendas en paralelo con una sola consulta por tipo
+      // Buscar todas las prendas con códigos NFC en una sola consulta
+      const { data: garmentsByNfc, error: nfcError } = await supabase
+        .from('garments')
+        .select('*')
+        .in('nfc_tag_id', codes)
+
+      // Buscar todas las prendas con códigos barcode en una sola consulta
+      const { data: garmentsByBarcode, error: barcodeError } = await supabase
+        .from('garments')
+        .select('*')
+        .in('barcode_id', codes)
+
+      if (nfcError) console.error('Error buscando NFC:', nfcError)
+      if (barcodeError) console.error('Error buscando Barcode:', barcodeError)
+
+      // Combinar resultados y eliminar duplicados
+      const allFoundGarments = new Map<string, Garment>()
+      
+      // Agregar prendas encontradas por NFC
+      if (garmentsByNfc) {
+        garmentsByNfc.forEach(garment => {
+          allFoundGarments.set(garment.id, garment)
+        })
+      }
+      
+      // Agregar prendas encontradas por barcode (sobrescribir si ya existe)
+      if (garmentsByBarcode) {
+        garmentsByBarcode.forEach(garment => {
+          allFoundGarments.set(garment.id, garment)
+        })
+      }
+
+      const foundGarments = Array.from(allFoundGarments.values())
+      
+      // Crear un mapa de códigos encontrados para identificar cuáles no se encontraron
+      const foundCodesMap = new Map<string, boolean>()
+      foundGarments.forEach(garment => {
+        if (garment.nfc_tag_id && codes.includes(garment.nfc_tag_id)) {
+          foundCodesMap.set(garment.nfc_tag_id, true)
+        }
+        if (garment.barcode_id && codes.includes(garment.barcode_id)) {
+          foundCodesMap.set(garment.barcode_id, true)
+        }
+      })
+
+      const notFoundCodes = codes.filter(code => !foundCodesMap.has(code))
+
+      console.log('📊 Resumen de búsqueda (optimizado):', {
+        totalCodes: codes.length,
+        found: foundGarments.length,
+        notFound: notFoundCodes.length
+      })
+
+      setFoundGarmentsBatch(foundGarments)
+
+      // Mostrar mensajes informativos
+      if (notFoundCodes.length > 0 && foundGarments.length === 0) {
+        setNfcError(`❌ No se encontraron prendas para los códigos: ${notFoundCodes.join(', ')}`)
+      } else if (notFoundCodes.length > 0) {
+        setNfcError(`⚠️ Se encontraron ${foundGarments.length} prendas. No se encontraron: ${notFoundCodes.join(', ')}`)
+      } else if (foundGarments.length > 0) {
+        const inUseCount = foundGarments.filter(g => g.status === 'in_use').length
+        if (inUseCount > 0) {
+          setNfcError(`ℹ️ Se encontraron ${foundGarments.length} prendas (${inUseCount} en uso - se restaurarán al asignar caja)`)
+        } else {
+          setNfcError('')
+        }
+      } else {
+        setNfcError('')
+      }
+    } catch (error) {
+      console.error('❌ Error searching batch garments:', error)
+      setNfcError(`Error al buscar las prendas: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setSearchingBatch(false)
+    }
+  }
+
+  // Función para encontrar la caja más vacía disponible
+  const findMostEmptyBox = async (): Promise<Box | null> => {
+    if (!boxes || boxes.length === 0) return null
+    
+    // Obtener conteos actualizados de todas las cajas
+    const boxesWithCount = await Promise.all(
+      boxes.map(async (box) => {
+        const { count, error: countError } = await supabase
+          .from('garments')
+          .select('*', { count: 'exact', head: true })
+          .eq('box_id', box.id)
+          .eq('status', 'available')
+        
+        if (countError) {
+          console.error('Error counting garments for box:', box.id, countError)
+          return { ...box, garment_count: 0 }
+        }
+        
+        return { ...box, garment_count: count || 0 }
+      })
+    )
+    
+    // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
+    const availableBoxes = boxesWithCount
+      .filter(box => (box.garment_count || 0) < 15)
+      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+    
+    return availableBoxes.length > 0 ? availableBoxes[0] : null
+  }
+
+  // Función para asignar caja a todo el lote (y restaurar prendas en uso)
+  const assignBoxToBatch = async () => {
+    if (!selectedBoxForBatch || foundGarmentsBatch.length === 0) {
+      setNfcError('Selecciona una caja')
+      return
+    }
+
+    setAssigningBox(true)
+    setNfcError('')
+
+    try {
+      // Obtener conteo actualizado de prendas disponibles en la caja seleccionada
+      const { count: currentCount } = await supabase
+        .from('garments')
+        .select('*', { count: 'exact', head: true })
+        .eq('box_id', selectedBoxForBatch)
+        .eq('status', 'available')
+
+      const currentBoxCount = currentCount || 0
+      // Contar todas las prendas que se van a asignar (incluyendo las que están en uso)
+      const garmentsToAssign = foundGarmentsBatch.length
+      const newCount = currentBoxCount + garmentsToAssign
+
+      // Determinar la caja a usar
+      let targetBoxId = selectedBoxForBatch
+      let boxChanged = false
+
+      // Si la caja seleccionada está llena o se llenará, buscar la más vacía
+      if (newCount > 15) {
+        console.log(`⚠️ Caja seleccionada se llenará (${newCount} > 15), buscando caja más vacía...`)
+        const mostEmptyBox = await findMostEmptyBox()
+        
+        if (mostEmptyBox) {
+          // Verificar que la caja más vacía tenga espacio
+          const { count: emptyBoxCount } = await supabase
+            .from('garments')
+            .select('*', { count: 'exact', head: true })
+            .eq('box_id', mostEmptyBox.id)
+            .eq('status', 'available')
+          
+          const emptyBoxCurrentCount = emptyBoxCount || 0
+          const emptyBoxNewCount = emptyBoxCurrentCount + garmentsToAssign
+          
+          if (emptyBoxNewCount <= 15) {
+            targetBoxId = mostEmptyBox.id
+            boxChanged = true
+            console.log(`✅ Cambiando a caja más vacía: "${mostEmptyBox.name}" (${emptyBoxCurrentCount} prendas)`)
+          } else {
+            // Si incluso la más vacía se llenaría, dividir entre múltiples cajas o mostrar error
+            setNfcError(`❌ No hay cajas con suficiente espacio. Se necesitan ${garmentsToAssign} espacios pero la caja más vacía solo tiene ${15 - emptyBoxCurrentCount} espacios disponibles.`)
+            setAssigningBox(false)
+            return
+          }
+        } else {
+          setNfcError('❌ No hay cajas disponibles con espacio suficiente.')
+          setAssigningBox(false)
+          return
+        }
+      }
+
+      const garmentIds = foundGarmentsBatch.map(g => g.id)
+      const inUseGarments = foundGarmentsBatch.filter(g => g.status === 'in_use')
+      
+      // Actualizar todas las prendas: asignar caja y restaurar las que están en uso
+      // IMPORTANTE: No modificar nfc_tag_id ni barcode_id, solo box_id y status
+      const { error } = await supabase
+        .from('garments')
+        .update({
+          box_id: targetBoxId,
+          status: 'available', // Restaurar todas las prendas a 'available'
+          updated_at: new Date().toISOString()
+        })
+        .in('id', garmentIds)
+
+      if (error) {
+        console.error('Error updating garments:', error)
+        throw error
+      }
+
+      // Verificar que los códigos no se perdieron
+      const { data: updatedGarments } = await supabase
+        .from('garments')
+        .select('id, nfc_tag_id, barcode_id, name')
+        .in('id', garmentIds)
+
+      // Verificar que los códigos se mantuvieron
+      const lostCodes = updatedGarments?.filter(g => {
+        const original = foundGarmentsBatch.find(og => og.id === g.id)
+        if (!original) return false
+        return (original.nfc_tag_id && !g.nfc_tag_id) || (original.barcode_id && !g.barcode_id)
+      })
+
+      if (lostCodes && lostCodes.length > 0) {
+        console.error('❌ ERROR: Se perdieron códigos en las prendas:', lostCodes)
+        setNfcError(`⚠️ Advertencia: Algunas prendas perdieron sus códigos. Por favor verifica.`)
+      }
+
+      const targetBox = boxes.find(b => b.id === targetBoxId)
+      const boxName = targetBox?.name || 'caja seleccionada'
+      const boxLocation = (targetBox as any)?.location
+
+      console.log(`✅ ${foundGarmentsBatch.length} prendas actualizadas (${inUseGarments.length} restauradas de "en uso") en "${boxName}"`)
+
+      // Recargar datos
+      await fetchGarments()
+      await fetchBoxes()
+
+      // Limpiar estados
+      setBatchCodes('')
+      setFoundGarmentsBatch([])
+      setSelectedBoxForBatch('')
+      setSelectedBoxInfo(null)
+      setHasEnoughSpace(true)
+      setShowNFCScanner(false)
+      setNfcError('')
+      
+      // Mostrar mensaje de éxito mejorado y claro
+      const alertMessage = `✅ ASIGNACIÓN COMPLETADA\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `📦 CAJA: ${boxName}\n` +
+        (boxLocation ? `📍 UBICACIÓN: ${boxLocation}\n` : '') +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `✅ ${foundGarmentsBatch.length} prenda(s) asignada(s)\n` +
+        (inUseGarments.length > 0 ? `✅ ${inUseGarments.length} prenda(s) restaurada(s) del estado "en uso"\n` : '') +
+        (boxChanged ? `\n⚠️ Nota: Se asignó automáticamente a la caja más vacía disponible` : '')
+      
+      alert(alertMessage)
+      
+      // También mostrar en la UI con un mensaje persistente y claro
+      setNfcError(`✅ ${foundGarmentsBatch.length} prenda(s) asignada(s) a la caja "${boxName}"${boxLocation ? ` (📍 ${boxLocation})` : ''}${inUseGarments.length > 0 ? `. ${inUseGarments.length} restaurada(s).` : ''}`)
+    } catch (error) {
+      console.error('Error assigning box to batch:', error)
+      setNfcError(`Error al asignar la caja: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setAssigningBox(false)
+    }
+  }
+
+  // Manejar pegado de códigos con separador automático
+  const handleBatchCodesPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    const pastedText = e.clipboardData.getData('text')
+    
+    // Si el texto pegado contiene múltiples líneas o espacios, separarlos
+    const codes = pastedText
+      .split(/[\n\r\t,; ]+/)
+      .map(code => code.trim())
+      .filter(code => code.length > 0)
+    
+    if (codes.length > 1) {
+      // Si hay múltiples códigos, unirlos con "/"
+      const newValue = batchCodes 
+        ? `${batchCodes}/${codes.join('/')}`
+        : codes.join('/')
+      setBatchCodes(newValue)
+    } else {
+      // Si es un solo código, agregarlo con "/" si ya hay contenido
+      const newValue = batchCodes && codes.length > 0
+        ? `${batchCodes}/${codes[0]}`
+        : codes[0] || ''
+      setBatchCodes(newValue)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -507,7 +837,7 @@ export default function ClosetPage() {
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                   {forgottenGarments.map(garment => (
                     <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-2 sm:p-3 border shadow-sm">
-                      <div className="aspect-square bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
+                      <div className="h-20 sm:h-24 bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
                         {garment.image_url ? (
                           <img
                             src={garment.image_url}
@@ -524,7 +854,8 @@ export default function ClosetPage() {
                       <Button
                         size="sm"
                         variant={selectedGarments.find(g => g.id === garment.id) ? "default" : "outline"}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           if (selectedGarments.find(g => g.id === garment.id)) {
                             handleRemoveFromSearchList(garment.id)
                           } else {
@@ -603,11 +934,15 @@ export default function ClosetPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-          {filteredGarments.map(garment => (
+          {filteredGarments.map(garment => {
+            const hasNoBox = !garment.box_id
+            return (
             <Card 
               key={garment.id} 
               className={`group hover:shadow-lg transition-shadow ${
                 userProfile?.role === 'admin' ? 'cursor-pointer' : ''
+              } ${
+                hasNoBox ? 'border-2 border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''
               }`}
               onClick={() => {
                 if (userProfile?.role === 'admin') {
@@ -617,7 +952,7 @@ export default function ClosetPage() {
               }}
             >
               <CardHeader className="pb-3">
-                <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+                <div className="h-32 bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                   {garment.image_url ? (
                     <img
                       src={garment.image_url}
@@ -637,9 +972,14 @@ export default function ClosetPage() {
                 </div>
                 <CardTitle className="text-lg line-clamp-1">{garment.name}</CardTitle>
                 <CardDescription className="space-y-1">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 flex-wrap">
                     <Package className="h-3 w-3" />
                     <span className="font-medium">{getBoxName(garment.box_id)}</span>
+                    {hasNoBox && (
+                      <Badge variant="destructive" className="ml-1 bg-yellow-500 hover:bg-yellow-600 text-yellow-950 dark:text-yellow-100 border-yellow-600">
+                        Sin caja
+                      </Badge>
+                    )}
                     {garment.box_id && boxes.find(b => b.id === garment.box_id)?.location && (
                       <span className="text-xs text-muted-foreground ml-2">
                         ({boxes.find(b => b.id === garment.box_id)?.location})
@@ -659,14 +999,14 @@ export default function ClosetPage() {
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">{garment.type}</Badge>
                   {garment.nfc_tag_id && (
-                    <Badge variant="outline" className="flex items-center gap-1">
+                    <Badge variant="outline" className="flex items-center gap-1 font-mono text-xs">
                       <Smartphone className="h-3 w-3" />
-                      NFC
+                      NFC: {garment.nfc_tag_id}
                     </Badge>
                   )}
                   {garment.barcode_id && (
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      📱 Barcode
+                    <Badge variant="outline" className="flex items-center gap-1 font-mono text-xs">
+                      📱 Barcode: {garment.barcode_id}
                     </Badge>
                   )}
                   {garment.color && (
@@ -695,7 +1035,10 @@ export default function ClosetPage() {
                     <Button
                       size="sm"
                       variant="default"
-                      onClick={() => handleRemoveFromSearchList(garment.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleRemoveFromSearchList(garment.id)
+                      }}
                       className="text-xs w-full sm:w-auto"
                     >
                       <Hand className="h-3 w-3 mr-1" />
@@ -706,7 +1049,10 @@ export default function ClosetPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleAddToSearchList(garment.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleAddToSearchList(garment.id)
+                      }}
                       className="text-xs w-full sm:w-auto"
                     >
                       <Hand className="h-3 w-3 mr-1" />
@@ -717,31 +1063,341 @@ export default function ClosetPage() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            )
+          })}
         </div>
       )}
 
       {/* NFC Scanner Dialog */}
-      <Dialog open={showNFCScanner} onOpenChange={setShowNFCScanner}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showNFCScanner} onOpenChange={(open) => {
+        setShowNFCScanner(open)
+        if (!open) {
+          setBatchCodes('')
+          setFoundGarmentsBatch([])
+          setSelectedBoxForBatch('')
+          setNfcError('')
+        }
+      }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Escanear Prenda NFC</DialogTitle>
+            <DialogTitle>
+              {userProfile?.role === 'admin' ? 'Buscar Prendas por Código' : 'Escanear Prenda NFC'}
+            </DialogTitle>
             <DialogDescription>
-              Acércate un tag NFC de una prenda para identificarla
+              {userProfile?.role === 'admin' 
+                ? 'Ingresa códigos NFC o barcode separados por "/" para buscar múltiples prendas'
+                : 'Acércate un tag NFC de una prenda para identificarla'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <NFCScanner
-              mode="read"
-              onSuccess={handleNFCScanSuccess}
-              onError={handleNFCScanError}
-              title="Escanear Tag NFC"
-              description="Acércate el tag NFC de la prenda que quieres identificar"
-            />
-            {nfcError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
-              </div>
+            {userProfile?.role === 'admin' ? (
+              <>
+                {/* Entrada manual de múltiples códigos para admin */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Códigos (NFC o Barcode) - Separa con "/", comas o espacios
+                  </label>
+                  <Input
+                    value={batchCodes}
+                    onChange={(e) => setBatchCodes(e.target.value)}
+                    onPaste={handleBatchCodesPaste}
+                    placeholder="Ej: AA:11:22:BB:EE / 123456789 / CC:33:44:DD:FF"
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    💡 Puedes pegar múltiples códigos separados por "/", comas, espacios o saltos de línea. Se normalizarán automáticamente.
+                  </p>
+                  {batchCodes && (
+                    <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                      <strong>Códigos detectados:</strong> {batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length}
+                    </div>
+                  )}
+                </div>
+
+                <Button
+                  onClick={searchBatchGarments}
+                  disabled={searchingBatch || !batchCodes.trim()}
+                  className="w-full"
+                >
+                  {searchingBatch ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Buscar Prendas
+                    </>
+                  )}
+                </Button>
+
+                {nfcError && (
+                  <div className={`p-3 rounded-lg border ${
+                    nfcError.includes('❌') 
+                      ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                      : 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800'
+                  }`}>
+                    <p className={`text-sm ${
+                      nfcError.includes('❌')
+                        ? 'text-red-700 dark:text-red-300'
+                        : 'text-yellow-700 dark:text-yellow-300'
+                    }`}>{nfcError}</p>
+                  </div>
+                )}
+
+                {/* Lista de prendas encontradas */}
+                {foundGarmentsBatch.length > 0 && (
+                  <div className="space-y-4 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">
+                        Prendas Encontradas ({foundGarmentsBatch.length})
+                      </h3>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {foundGarmentsBatch.map(garment => {
+                        const isInUse = garment.status === 'in_use'
+                        return (
+                          <Card 
+                            key={garment.id} 
+                            className={`p-3 ${isInUse ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                                {garment.image_url ? (
+                                  <img
+                                    src={garment.image_url}
+                                    alt={garment.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <Shirt className="h-6 w-6 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium truncate">{garment.name}</p>
+                                  {isInUse && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      En Uso
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-sm text-muted-foreground">{garment.type}</p>
+                                <div className="flex gap-2 mt-1 flex-wrap">
+                                  {garment.nfc_tag_id && (
+                                    <Badge variant="outline" className="text-xs font-mono">
+                                      NFC: {garment.nfc_tag_id}
+                                    </Badge>
+                                  )}
+                                  {garment.barcode_id && (
+                                    <Badge variant="outline" className="text-xs font-mono">
+                                      📱 {garment.barcode_id}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-sm text-muted-foreground text-right">
+                                <div>{getBoxName(garment.box_id)}</div>
+                                {isInUse && (
+                                  <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                    Se restaurará
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        )
+                      })}
+                    </div>
+
+                    {/* Selector de caja para asignar al lote */}
+                    <div className="space-y-2 border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">
+                          Asignar caja a todo el lote
+                        </label>
+                        {foundGarmentsBatch.filter(g => g.status === 'in_use').length > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {foundGarmentsBatch.filter(g => g.status === 'in_use').length} prenda(s) se restaurarán
+                          </Badge>
+                        )}
+                      </div>
+                      <Select
+                        value={selectedBoxForBatch}
+                        onValueChange={async (value) => {
+                          setSelectedBoxForBatch(value)
+                          
+                          if (value && value !== 'none') {
+                            // Verificar capacidad de la caja seleccionada
+                            const { count } = await supabase
+                              .from('garments')
+                              .select('*', { count: 'exact', head: true })
+                              .eq('box_id', value)
+                              .eq('status', 'available')
+                            
+                            const currentCount = count || 0
+                            const garmentsToAssign = foundGarmentsBatch.length
+                            const availableSpace = 15 - currentCount
+                            const willFit = garmentsToAssign <= availableSpace
+                            
+                            const box = boxes.find(b => b.id === value)
+                            setSelectedBoxInfo(box ? {
+                              name: box.name,
+                              location: (box as any).location,
+                              currentCount,
+                              availableSpace
+                            } : null)
+                            setHasEnoughSpace(willFit)
+                            
+                            // Si no cabe, buscar la caja más vacía automáticamente
+                            if (!willFit) {
+                              const mostEmptyBox = await findMostEmptyBox()
+                              if (mostEmptyBox) {
+                                const { count: emptyCount } = await supabase
+                                  .from('garments')
+                                  .select('*', { count: 'exact', head: true })
+                                  .eq('box_id', mostEmptyBox.id)
+                                  .eq('status', 'available')
+                                
+                                const emptyCurrentCount = emptyCount || 0
+                                const emptyAvailableSpace = 15 - emptyCurrentCount
+                                
+                                if (garmentsToAssign <= emptyAvailableSpace) {
+                                  setSelectedBoxForBatch(mostEmptyBox.id)
+                                  setSelectedBoxInfo({
+                                    name: mostEmptyBox.name,
+                                    location: (mostEmptyBox as any).location,
+                                    currentCount: emptyCurrentCount,
+                                    availableSpace: emptyAvailableSpace
+                                  })
+                                  setHasEnoughSpace(true)
+                                }
+                              }
+                            }
+                          } else {
+                            setSelectedBoxInfo(null)
+                            setHasEnoughSpace(true)
+                          }
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecciona una caja (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin caja</SelectItem>
+                          {boxes.map(box => {
+                            const count = (box as any).garment_count ?? 0
+                            const isFull = count >= 15
+                            const availableSpace = 15 - count
+                            const willFit = foundGarmentsBatch.length <= availableSpace
+                            
+                            return (
+                              <SelectItem 
+                                key={box.id} 
+                                value={box.id}
+                                disabled={isFull || !willFit}
+                                className={isFull || !willFit ? 'opacity-50' : ''}
+                              >
+                                {box.name} {count > 0 && `(${count}/15)`} 
+                                {isFull && ' - LLENA'}
+                                {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+                      
+                      {/* Información de la caja seleccionada */}
+                      {selectedBoxInfo && selectedBoxForBatch && selectedBoxForBatch !== 'none' && (
+                        <div className={`p-4 rounded-lg border-2 ${
+                          hasEnoughSpace 
+                            ? 'bg-green-50 dark:bg-green-950 border-green-400 dark:border-green-600' 
+                            : 'bg-red-50 dark:bg-red-950 border-red-400 dark:border-red-600'
+                        }`}>
+                          <div className="flex items-start gap-3">
+                            {hasEnoughSpace ? (
+                              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                            ) : (
+                              <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+                            )}
+                            <div className="flex-1">
+                              <p className={`font-bold text-xl mb-2 ${
+                                hasEnoughSpace 
+                                  ? 'text-green-900 dark:text-green-100' 
+                                  : 'text-red-900 dark:text-red-100'
+                              }`}>
+                                📦 {selectedBoxInfo.name}
+                              </p>
+                              {selectedBoxInfo.location && (
+                                <p className={`text-base font-semibold mb-2 ${
+                                  hasEnoughSpace 
+                                    ? 'text-green-800 dark:text-green-200' 
+                                    : 'text-red-800 dark:text-red-200'
+                                }`}>
+                                  📍 Ubicación: <span className="underline">{selectedBoxInfo.location}</span>
+                                </p>
+                              )}
+                              <p className={`text-sm ${
+                                hasEnoughSpace 
+                                  ? 'text-green-700 dark:text-green-300' 
+                                  : 'text-red-700 dark:text-red-300'
+                              }`}>
+                                {hasEnoughSpace 
+                                  ? `✅ Espacio disponible: ${selectedBoxInfo.availableSpace} prendas (${selectedBoxInfo.currentCount}/15 ocupadas)`
+                                  : `❌ No hay suficiente espacio. Disponible: ${selectedBoxInfo.availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas`
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <Button
+                        onClick={assignBoxToBatch}
+                        disabled={assigningBox || !selectedBoxForBatch || selectedBoxForBatch === 'none' || !hasEnoughSpace}
+                        className={`w-full ${
+                          !hasEnoughSpace ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {assigningBox ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Asignando...
+                          </>
+                        ) : !hasEnoughSpace ? (
+                          <>
+                            <AlertCircle className="h-4 w-4 mr-2" />
+                            No hay espacio suficiente
+                          </>
+                        ) : (
+                          <>
+                            <Package className="h-4 w-4 mr-2" />
+                            Asignar Caja al Lote
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Escáner NFC normal para usuarios */}
+                <NFCScanner
+                  mode="read"
+                  onSuccess={handleNFCScanSuccess}
+                  onError={handleNFCScanError}
+                  title="Escanear Tag NFC"
+                  description="Acércate el tag NFC de la prenda que quieres identificar"
+                />
+                {nfcError && (
+                  <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                    <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </DialogContent>
@@ -777,10 +1433,15 @@ export default function ClosetPage() {
                   <h3 className="font-semibold text-lg">{foundGarment.name}</h3>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">{foundGarment.type}</Badge>
-                    <Badge variant="outline" className="flex items-center gap-1">
+                    <Badge variant="outline" className="flex items-center gap-1 font-mono text-xs">
                       <Smartphone className="h-3 w-3" />
                       NFC: {foundGarment.nfc_tag_id}
                     </Badge>
+                    {foundGarment.barcode_id && (
+                      <Badge variant="outline" className="flex items-center gap-1 font-mono text-xs">
+                        📱 Barcode: {foundGarment.barcode_id}
+                      </Badge>
+                    )}
                     {foundGarment.color && (
                       <Badge variant="outline">{foundGarment.color}</Badge>
                     )}

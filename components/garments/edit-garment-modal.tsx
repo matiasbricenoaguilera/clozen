@@ -63,6 +63,45 @@ export function EditGarmentModal({
   const [error, setError] = useState('')
   const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
   const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
+  const [boxesWithCount, setBoxesWithCount] = useState<Box[]>([])
+
+  // Cargar conteo de prendas por caja cuando se abre el modal
+  useEffect(() => {
+    if (open && boxes.length > 0) {
+      const loadBoxCounts = async () => {
+        try {
+          const boxesWithCounts = await Promise.all(
+            boxes.map(async (box) => {
+              // Si ya tiene garment_count, usarlo
+              if (box.garment_count !== undefined) {
+                return box
+              }
+              
+              // Si no, calcularlo
+              const { count, error: countError } = await supabase
+                .from('garments')
+                .select('*', { count: 'exact', head: true })
+                .eq('box_id', box.id)
+                .eq('status', 'available')
+              
+              if (countError) {
+                console.error('Error counting garments for box:', box.id, countError)
+                return { ...box, garment_count: 0 }
+              }
+              
+              return { ...box, garment_count: count || 0 }
+            })
+          )
+          setBoxesWithCount(boxesWithCounts)
+        } catch (error) {
+          console.error('Error loading box counts:', error)
+          setBoxesWithCount(boxes)
+        }
+      }
+      
+      loadBoxCounts()
+    }
+  }, [open, boxes])
 
   // Cargar datos de la prenda cuando se abre el modal
   useEffect(() => {
@@ -164,7 +203,37 @@ export function EditGarmentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.barcode_id, garment?.id])
 
+  // Función para encontrar la caja más vacía disponible
+  const findMostEmptyBox = (): Box | null => {
+    if (!boxesWithCount || boxesWithCount.length === 0) return null
+    
+    // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
+    const availableBoxes = boxesWithCount
+      .filter(box => (box.garment_count || 0) < 15)
+      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+    
+    return availableBoxes.length > 0 ? availableBoxes[0] : null
+  }
+
   const handleChange = (field: string, value: any) => {
+    // Si se está cambiando la caja, validar capacidad
+    if (field === 'box_id' && value && value !== 'none') {
+      const selectedBox = boxesWithCount.find(b => b.id === value)
+      if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+        const mostEmptyBox = findMostEmptyBox()
+        if (mostEmptyBox) {
+          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+        } else {
+          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+        }
+        // No cambiar el valor si la caja está llena
+        return
+      } else {
+        // Limpiar error si la caja está disponible
+        setError('')
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -293,6 +362,29 @@ export function EditGarmentModal({
         return
       }
 
+      // Validar capacidad de la caja antes de guardar
+      if (formData.box_id) {
+        const selectedBox = boxesWithCount.find(b => b.id === formData.box_id)
+        // Si la prenda ya está en esta caja, no contar esta prenda
+        const currentBoxId = garment.box_id
+        const isMovingToSameBox = currentBoxId === formData.box_id
+        
+        if (selectedBox) {
+          // Si se está moviendo a la misma caja, no hay problema
+          // Si se está moviendo a otra caja, verificar capacidad
+          if (!isMovingToSameBox && (selectedBox.garment_count || 0) >= 15) {
+            const mostEmptyBox = findMostEmptyBox()
+            if (mostEmptyBox) {
+              setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+            } else {
+              setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+            }
+            setSaving(false)
+            return
+          }
+        }
+      }
+
       // Normalizar códigos NFC y de barras antes de guardar
       const normalizedNfcTag = formData.nfc_tag_id?.trim().toUpperCase() || null
       const normalizedBarcode = formData.barcode_id.trim() || null
@@ -419,11 +511,20 @@ export function EditGarmentModal({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sin caja</SelectItem>
-                  {boxes.map(box => (
-                    <SelectItem key={box.id} value={box.id}>
-                      {box.name}
-                    </SelectItem>
-                  ))}
+                  {(boxesWithCount.length > 0 ? boxesWithCount : boxes).map(box => {
+                    const count = box.garment_count ?? 0
+                    const isFull = count >= 15
+                    return (
+                      <SelectItem 
+                        key={box.id} 
+                        value={box.id}
+                        disabled={isFull}
+                        className={isFull ? 'opacity-50' : ''}
+                      >
+                        {box.name} {count > 0 && `(${count}/15)`} {isFull && ' - LLENA'}
+                      </SelectItem>
+                    )
+                  })}
                 </SelectContent>
               </Select>
             </div>

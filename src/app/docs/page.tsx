@@ -1,4 +1,3 @@
-import { Navbar } from "@/components/layout/navbar";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Settings, Database, Zap, Smartphone } from "lucide-react";
@@ -6,7 +5,6 @@ import { ArrowLeft, Settings, Database, Zap, Smartphone } from "lucide-react";
 export default function DocsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Navbar />
 
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">

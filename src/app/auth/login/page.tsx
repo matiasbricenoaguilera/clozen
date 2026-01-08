@@ -50,7 +50,7 @@ export default function LoginPage() {
         } else {
           // Redirigir según el rol del usuario
           if (userProfile?.role === 'admin') {
-            router.push('/') // Admin va al home
+            router.push('/admin/organize') // Admin va a organizar
           } else {
             router.push('/closet') // Usuario normal va al closet
           }

@@ -11,12 +11,12 @@ export function useAuth() {
   const [userProfile, setUserProfile] = useState<UserType | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const fetchUserProfile = useCallback(async (userId: string) => {
-    console.log('🔍 [useAuth] Obteniendo perfil para usuario:', userId)
+  const fetchUserProfile = useCallback(async (userId: string, retryCount = 0) => {
+    console.log('🔍 [useAuth] Obteniendo perfil para usuario:', userId, retryCount > 0 ? `(reintento ${retryCount})` : '')
     
-    // Timeout de 10 segundos para evitar que se quede colgado
+    // Timeout aumentado a 30 segundos para conexiones lentas
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Timeout al obtener perfil')), 10000)
+      setTimeout(() => reject(new Error('Timeout al obtener perfil')), 30000)
     })
 
     try {
@@ -41,9 +41,22 @@ export function useAuth() {
         // o el usuario no fue creado correctamente durante el registro
         if (error.code === 'PGRST116') {
           console.warn('⚠️ [useAuth] Usuario no encontrado en tabla users. Esto puede indicar un problema con el registro.')
+          setUserProfile(null)
+        } else if (retryCount < 2) {
+          // Reintentar hasta 2 veces con backoff exponencial
+          const delay = Math.pow(2, retryCount) * 1000 // 1s, 2s
+          console.log(`🔄 [useAuth] Reintentando en ${delay}ms...`)
+          setTimeout(() => {
+            fetchUserProfile(userId, retryCount + 1)
+          }, delay)
+          return // No establecer loading=false todavía, estamos reintentando
+        } else {
+          // Después de 3 intentos, mantener el perfil anterior si existe
+          // Solo establecer null si realmente no hay sesión
+          console.warn('⚠️ [useAuth] No se pudo obtener el perfil después de varios intentos. Manteniendo sesión activa.')
+          // NO establecer userProfile a null para mantener la sesión
+          setLoading(false)
         }
-        
-        setUserProfile(null)
       } else {
         console.log('✅ [useAuth] Perfil obtenido:', {
           id: data.id,
@@ -52,17 +65,33 @@ export function useAuth() {
           full_name: data.full_name
         })
         setUserProfile(data)
+        setLoading(false)
       }
     } catch (error) {
       console.error('❌ [useAuth] Excepción al obtener perfil:', error)
       if (error instanceof Error && error.message === 'Timeout al obtener perfil') {
-        console.error('⏱️ [useAuth] Timeout: La consulta tardó más de 10 segundos. Verifica RLS y conexión.')
+        console.error('⏱️ [useAuth] Timeout: La consulta tardó más de 30 segundos.')
+        
+        if (retryCount < 2) {
+          // Reintentar con backoff exponencial
+          const delay = Math.pow(2, retryCount) * 2000 // 2s, 4s
+          console.log(`🔄 [useAuth] Reintentando después de timeout en ${delay}ms...`)
+          setTimeout(() => {
+            fetchUserProfile(userId, retryCount + 1)
+          }, delay)
+          return // No establecer loading=false todavía
+        } else {
+          console.warn('⚠️ [useAuth] Timeout después de varios intentos. Manteniendo sesión activa si existe.')
+          // NO establecer userProfile a null para mantener la sesión activa
+          // El usuario puede seguir trabajando aunque el perfil no se haya cargado
+          setLoading(false)
+        }
+      } else {
+        // Para otros errores, mantener el perfil anterior si hay sesión activa
+        // Solo establecer null si realmente no hay sesión
+        console.warn('⚠️ [useAuth] Error desconocido al obtener perfil. Manteniendo sesión activa.')
+        setLoading(false)
       }
-      setUserProfile(null)
-    } finally {
-      // SIEMPRE establecer loading en false, incluso si hay errores
-      console.log('✅ [useAuth] Finalizando carga de perfil, estableciendo loading=false')
-      setLoading(false)
     }
   }, [])
 

@@ -169,10 +169,10 @@ export default function AddGarmentPage() {
   }
 
   // Función para verificar si un código NFC está duplicado
-  const checkNfcDuplicate = async (nfcTag: string) => {
+  const checkNfcDuplicate = async (nfcTag: string): Promise<{ exists: boolean; garmentName?: string }> => {
     if (!nfcTag || !nfcTag.trim() || !isSupabaseConfigured) {
       setNfcDuplicate({ exists: false })
-      return
+      return { exists: false }
     }
 
     // Normalizar el código antes de buscar
@@ -186,13 +186,17 @@ export default function AddGarmentPage() {
         .single()
 
       if (data && !error) {
-        setNfcDuplicate({ exists: true, garmentName: data.name })
+        const result = { exists: true, garmentName: data.name }
+        setNfcDuplicate(result)
+        return result
       } else {
         setNfcDuplicate({ exists: false })
+        return { exists: false }
       }
     } catch (error) {
       // Si no se encuentra, no es duplicado
       setNfcDuplicate({ exists: false })
+      return { exists: false }
     }
   }
 
@@ -394,15 +398,19 @@ export default function AddGarmentPage() {
         
         if (duplicate.type === 'barcode') {
           errorMessage = `El código de barras "${duplicate.value}" ya está asignado a otra prenda. Por favor, usa un código diferente o elimina el código de barras.`
-          // Limpiar el código de barras del formulario
-          setBarcodeCode('')
+          // NO limpiar automáticamente - dejar que el usuario decida
+          // setBarcodeCode('')
         } else if (duplicate.type === 'nfc') {
           errorMessage = `El tag NFC "${duplicate.value}" ya está asignado a otra prenda. Por favor, usa un tag diferente o elimina el tag NFC.`
-          // Limpiar el tag NFC del formulario
-          setSelectedNfcTag('')
+          // NO limpiar automáticamente - dejar que el usuario decida
+          // setSelectedNfcTag('')
         }
         
         console.error('❌ Identificador duplicado:', duplicate)
+        console.error('❌ Códigos actuales en formulario:', {
+          nfc: selectedNfcTag,
+          barcode: barcodeCode
+        })
         setError(errorMessage)
         setSaving(false)
         return
@@ -420,31 +428,142 @@ export default function AddGarmentPage() {
         hasBarcode: !!barcodeCode.trim()
       })
 
-      // Normalizar código NFC antes de guardar (limpiar espacios y convertir a mayúsculas)
-      const normalizedNfcTag = selectedNfcTag?.trim().toUpperCase() || null
+      // Normalizar código NFC antes de guardar (mejorado)
+      // IMPORTANTE: Verificar que selectedNfcTag tenga contenido válido
+      let normalizedNfcTag: string | null = null
+      
+      if (selectedNfcTag) {
+        // Verificar que selectedNfcTag sea un string válido
+        if (typeof selectedNfcTag === 'string') {
+          const trimmed = selectedNfcTag.trim()
+          if (trimmed.length > 0) {
+            normalizedNfcTag = trimmed.toUpperCase()
+            console.log('✅ Código NFC normalizado correctamente:', {
+              original: selectedNfcTag,
+              trimmed: trimmed,
+              normalized: normalizedNfcTag
+            })
+          } else {
+            console.warn('⚠️ Código NFC tiene solo espacios en blanco después de trim')
+          }
+        } else {
+          console.error('❌ ERROR: selectedNfcTag no es un string:', {
+            type: typeof selectedNfcTag,
+            value: selectedNfcTag
+          })
+        }
+      } else {
+        console.log('ℹ️ No hay código NFC para normalizar (selectedNfcTag es falsy)')
+      }
+      
       const normalizedBarcode = barcodeCode.trim() || null
 
-      console.log('📝 Códigos normalizados:', {
-        nfc: normalizedNfcTag,
-        barcode: normalizedBarcode,
-        originalNfc: selectedNfcTag
+      // Logging detallado para diagnosticar
+      console.log('📝 Códigos antes de guardar:', {
+        selectedNfcTag: selectedNfcTag,
+        selectedNfcTagType: typeof selectedNfcTag,
+        selectedNfcTagLength: selectedNfcTag?.length || 0,
+        selectedNfcTagTrimmed: selectedNfcTag?.trim(),
+        selectedNfcTagTrimmedLength: selectedNfcTag?.trim().length || 0,
+        normalizedNfcTag: normalizedNfcTag,
+        normalizedNfcTagType: typeof normalizedNfcTag,
+        normalizedNfcTagLength: normalizedNfcTag?.length || 0,
+        barcodeCode: barcodeCode,
+        normalizedBarcode: normalizedBarcode,
+        hasNfc: !!normalizedNfcTag,
+        hasBarcode: !!normalizedBarcode,
+        willSaveNfc: !!normalizedNfcTag,
+        willSaveBarcode: !!normalizedBarcode
       })
+
+      // Validar: Si el usuario pensó que había guardado un código NFC pero está vacío
+      if (selectedNfcTag && !normalizedNfcTag) {
+        console.error('❌ ERROR: Código NFC vacío después de normalizar:', {
+          original: selectedNfcTag,
+          afterTrim: selectedNfcTag.trim(),
+          trimLength: selectedNfcTag.trim().length,
+          normalized: normalizedNfcTag,
+          willNotSave: true
+        })
+      }
+      
+      // Advertencia si hay selectedNfcTag pero se convertirá en null
+      if (selectedNfcTag && selectedNfcTag.trim().length === 0) {
+        console.error('❌ ERROR: selectedNfcTag tiene solo espacios en blanco - NO SE GUARDARÁ')
+      }
+      
+      // Validación crítica: Si hay selectedNfcTag pero normalizedNfcTag es null, hay un problema
+      if (selectedNfcTag && selectedNfcTag.length > 0 && !normalizedNfcTag) {
+        console.error('❌ ERROR CRÍTICO: selectedNfcTag tiene contenido pero normalizedNfcTag es null')
+        console.error('❌ Esto significa que el código NO se guardará')
+      }
+
+      // Validación final antes de guardar
+      if (selectedNfcTag && selectedNfcTag.trim().length > 0 && !normalizedNfcTag) {
+        console.error('❌ ERROR CRÍTICO: No se puede normalizar el código NFC')
+        setError('Error al procesar el código NFC. Por favor, verifica el formato e inténtalo de nuevo.')
+        setSaving(false)
+        return
+      }
+
+      // Validar capacidad de la caja antes de guardar
+      if (formData.boxId) {
+        const selectedBox = boxes.find(b => b.id === formData.boxId)
+        if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+          // Encontrar la caja más vacía
+          const availableBoxes = boxes
+            .filter(box => (box.garment_count || 0) < 15)
+            .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+          
+          const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
+          
+          if (mostEmptyBox) {
+            setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+          } else {
+            setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+          }
+          setSaving(false)
+          return
+        }
+      }
+      
+      // Preparar datos para insertar
+      const insertData = {
+        user_id: selectedUserId || userProfile?.id,
+        name: formData.name.trim(),
+        type: formData.type,
+        season: formData.season,
+        style: formData.style,
+        image_url: imageUrl,
+        box_id: formData.boxId || null,
+        nfc_tag_id: normalizedNfcTag,
+        barcode_id: normalizedBarcode,
+        status: 'available' as const
+      }
+      
+      console.log('💾 Datos a insertar:', {
+        ...insertData,
+        nfc_tag_id_value: insertData.nfc_tag_id,
+        nfc_tag_id_type: typeof insertData.nfc_tag_id,
+        nfc_tag_id_isNull: insertData.nfc_tag_id === null,
+        nfc_tag_id_isUndefined: insertData.nfc_tag_id === undefined,
+        barcode_id_value: insertData.barcode_id
+      })
+      
+      // Validación crítica: Si hay selectedNfcTag pero nfc_tag_id es null en insertData
+      if (selectedNfcTag && selectedNfcTag.trim().length > 0 && insertData.nfc_tag_id === null) {
+        console.error('❌ ERROR CRÍTICO: El código NFC NO se guardará porque insertData.nfc_tag_id es null')
+        console.error('❌ selectedNfcTag:', selectedNfcTag)
+        console.error('❌ normalizedNfcTag:', normalizedNfcTag)
+        setError('Error: El código NFC no se pudo procesar correctamente. Por favor, verifica el formato.')
+        setSaving(false)
+        return
+      }
 
       const { data: garmentData, error: insertError } = await supabase
         .from('garments')
-        .insert({
-          user_id: selectedUserId || userProfile?.id,
-          name: formData.name.trim(),
-          type: formData.type,
-          season: formData.season,
-          style: formData.style,
-          image_url: imageUrl,
-          box_id: formData.boxId || null,
-          nfc_tag_id: normalizedNfcTag,
-          barcode_id: normalizedBarcode,
-          status: 'available'
-        })
-        .select()
+        .insert(insertData)
+        .select('id, name, type, nfc_tag_id, barcode_id')
         .single()
 
       if (insertError) {
@@ -456,13 +575,43 @@ export default function AddGarmentPage() {
           hint: insertError.hint,
           userId: selectedUserId || userProfile?.id,
           userRole: userProfile?.role,
-          isAdmin: userProfile?.role === 'admin'
+          isAdmin: userProfile?.role === 'admin',
+          nfcTag: normalizedNfcTag,
+          barcode: normalizedBarcode
         })
+        // Verificar si el error es por código NFC
+        if (insertError.message?.includes('nfc_tag_id')) {
+          console.error('❌ Error específico con código NFC:', {
+            original: selectedNfcTag,
+            normalized: normalizedNfcTag,
+            error: insertError
+          })
+        }
         throw insertError
       }
 
       console.timeEnd('👕 Garment Insert Time')
       console.log('✅ Prenda creada exitosamente:', garmentData?.id)
+      
+      // Verificar que el código se guardó correctamente
+      console.log('✅ Verificación de códigos guardados:', {
+        id: garmentData?.id,
+        nfc_tag_id: garmentData?.nfc_tag_id,
+        barcode_id: garmentData?.barcode_id,
+        expectedNfc: normalizedNfcTag,
+        expectedBarcode: normalizedBarcode,
+        nfcMatches: garmentData?.nfc_tag_id === normalizedNfcTag,
+        barcodeMatches: garmentData?.barcode_id === normalizedBarcode
+      })
+      
+      // Advertencia si el código NFC no se guardó como se esperaba
+      if (normalizedNfcTag && !garmentData?.nfc_tag_id) {
+        console.error('⚠️ ADVERTENCIA: Código NFC no se guardó correctamente', {
+          expected: normalizedNfcTag,
+          saved: garmentData?.nfc_tag_id,
+          garmentId: garmentData?.id
+        })
+      }
 
       // Registrar el tag NFC en la tabla nfc_tags si existe
       // Esta operación es independiente y no bloquea el éxito general
@@ -667,13 +816,15 @@ export default function AddGarmentPage() {
 
   // Validar formato de código NFC manual
   const validateNfcCode = (code: string): boolean => {
+    const trimmedCode = code.trim()
+    
     // Formatos válidos:
-    // - MAC address: XX:XX:XX:XX:XX:XX
-    // - Hexadecimal largo: al menos 8 caracteres hexadecimales
-    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
+    // - MAC address: cualquier número de pares (mínimo 2 pares) como XX:XX o XX:XX:XX:XX:XX:XX
+    // - Hexadecimal largo: al menos 8 caracteres hexadecimales sin dos puntos
+    const macRegex = /^([0-9A-Fa-f]{2}:)+[0-9A-Fa-f]{2}$/
     const hexRegex = /^[0-9A-Fa-f]{8,}$/
 
-    return macRegex.test(code) || hexRegex.test(code)
+    return macRegex.test(trimmedCode) || hexRegex.test(trimmedCode)
   }
 
   const handleManualNfcSubmit = async () => {
@@ -683,7 +834,7 @@ export default function AddGarmentPage() {
     }
 
     if (!validateNfcCode(manualNfcCode.trim())) {
-      setError('Formato inválido. Usa formato MAC (XX:XX:XX:XX:XX:XX) o código hexadecimal largo')
+      setError('Formato inválido. Usa formato MAC (XX:XX:XX:XX:XX o XX:XX:XX:XX:XX:XX) o código hexadecimal largo')
       return
     }
 
@@ -695,12 +846,28 @@ export default function AddGarmentPage() {
       await new Promise(resolve => setTimeout(resolve, 500))
 
       const nfcCode = manualNfcCode.trim().toUpperCase()
-      // Validar antes de asignar
-      await checkNfcDuplicate(nfcCode)
+      console.log('📱 Procesando código NFC manual:', {
+        original: manualNfcCode,
+        normalized: nfcCode,
+        length: nfcCode.length
+      })
+      
+      // Validar antes de asignar y obtener el resultado directamente
+      const duplicateCheck = await checkNfcDuplicate(nfcCode)
+      
+      // Verificar si hay duplicado antes de asignar usando el resultado directo
+      if (duplicateCheck.exists) {
+        setError(`El código NFC "${nfcCode}" ya está registrado en la prenda "${duplicateCheck.garmentName}"`)
+        setAssociatingNfc(false)
+        return
+      }
+      
+      console.log('✅ Asignando código NFC:', nfcCode)
       setSelectedNfcTag(nfcCode)
       setManualNfcCode('')
       setNfcMode(null)
     } catch (error) {
+      console.error('❌ Error al procesar código NFC:', error)
       setError('Error al procesar el código NFC')
     } finally {
       setAssociatingNfc(false)
@@ -872,22 +1039,50 @@ export default function AddGarmentPage() {
                   <Label>Caja</Label>
                   <Select
                     value={formData.boxId}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, boxId: value }))}
+                    onValueChange={(value) => {
+                      const selectedBox = boxes.find(b => b.id === value)
+                      if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+                        // Encontrar la caja más vacía
+                        const availableBoxes = boxes
+                          .filter(box => (box.garment_count || 0) < 15)
+                          .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+                        
+                        const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
+                        
+                        if (mostEmptyBox) {
+                          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+                        } else {
+                          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+                        }
+                        // No cambiar el valor si la caja está llena
+                        return
+                      } else {
+                        // Limpiar error si la caja está disponible
+                        setError('')
+                      }
+                      setFormData(prev => ({ ...prev, boxId: value }))
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecciona una caja (opcional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {boxes.map(box => (
-                        <SelectItem key={box.id} value={box.id}>
-                          {box.name}
-                          {box.garment_count !== undefined && (
-                            <span className="text-muted-foreground text-xs ml-2">
-                              ({box.garment_count} prendas)
-                            </span>
-                          )}
-                        </SelectItem>
-                      ))}
+                      {boxes.map(box => {
+                        const count = box.garment_count ?? 0
+                        const isFull = count >= 15
+                        return (
+                          <SelectItem 
+                            key={box.id} 
+                            value={box.id}
+                            disabled={isFull}
+                            className={isFull ? 'opacity-50' : ''}
+                          >
+                            {box.name}
+                            {count > 0 && ` (${count}/15)`}
+                            {isFull && ' - LLENA'}
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -995,7 +1190,7 @@ export default function AddGarmentPage() {
                         className="font-mono"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Ingresa el código que obtuviste de tu app NFC. Formatos válidos: MAC (XX:XX:XX:XX:XX:XX) o hexadecimal largo.
+                        Ingresa el código que obtuviste de tu app NFC. Formatos válidos: MAC (XX:XX, XX:XX:XX:XX:XX, XX:XX:XX:XX:XX:XX, etc.) o hexadecimal largo.
                       </p>
                     </div>
                     <div className="flex gap-2">

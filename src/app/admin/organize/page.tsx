@@ -168,9 +168,35 @@ export default function AdminOrganizePage() {
     await loadBoxGarments(box.id)
   }
 
+  // Función para encontrar la caja más vacía disponible
+  const findMostEmptyBox = (): Box | null => {
+    if (!boxes || boxes.length === 0) return null
+    
+    // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
+    const availableBoxes = boxes
+      .filter(box => (box.garment_count || 0) < 15)
+      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+    
+    return availableBoxes.length > 0 ? availableBoxes[0] : null
+  }
+
   // Función para mover prenda entre cajas
   const moveGarment = async (garmentId: string, targetBoxId: string | null) => {
     try {
+      // Si se está moviendo a una caja (no removiendo), verificar capacidad
+      if (targetBoxId) {
+        const targetBox = boxes.find(b => b.id === targetBoxId)
+        if (targetBox && (targetBox.garment_count || 0) >= 15) {
+          const mostEmptyBox = findMostEmptyBox()
+          if (mostEmptyBox) {
+            setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+          } else {
+            setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+          }
+          return
+        }
+      }
+
       const { error } = await supabase
         .from('garments')
         .update({
@@ -219,7 +245,12 @@ export default function AdminOrganizePage() {
       // Verificar capacidad de la caja
       const targetBox = boxes.find(b => b.id === targetBoxId)
       if (targetBox && (targetBox.garment_count || 0) >= 15) {
-        setError('Esta caja está llena (máximo 15 prendas)')
+        const mostEmptyBox = findMostEmptyBox()
+        if (mostEmptyBox) {
+          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+        } else {
+          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+        }
         return
       }
 

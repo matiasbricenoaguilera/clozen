@@ -6,7 +6,8 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Shirt, RefreshCw, Calendar, User, Copy, Check } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Shirt, RefreshCw, Calendar, User, Copy, Check, RotateCcw, Package, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 interface InUseGarment {
@@ -18,6 +19,7 @@ interface InUseGarment {
   usage_count: number
   nfc_tag_id: string | null
   barcode_id: string | null
+  box_id: string | null
   users: {
     id: string
     email: string
@@ -32,6 +34,8 @@ export default function AdminInUsePage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [restoringGarmentId, setRestoringGarmentId] = useState<string | null>(null)
+  const [restoredGarmentInfo, setRestoredGarmentInfo] = useState<{ id: string; name: string; hasBox: boolean } | null>(null)
 
   useEffect(() => {
     if (!authLoading && userProfile) {
@@ -65,6 +69,7 @@ export default function AdminInUsePage() {
           usage_count,
           nfc_tag_id,
           barcode_id,
+          box_id,
           users:user_id (
             id,
             email,
@@ -120,6 +125,56 @@ export default function AdminInUsePage() {
       setTimeout(() => setCopiedId(null), 2000)
     } catch (error) {
       console.error('Error al copiar:', error)
+    }
+  }
+
+  const restoreGarment = async (garmentId: string) => {
+    if (!isSupabaseConfigured) return
+
+    setRestoringGarmentId(garmentId)
+    
+    try {
+      // Obtener información de la prenda antes de restaurar
+      const { data: garment, error: fetchError } = await supabase
+        .from('garments')
+        .select('id, name, box_id')
+        .eq('id', garmentId)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Restaurar la prenda (cambiar status a 'available' y quitar caja asignada)
+      const { error: updateError } = await supabase
+        .from('garments')
+        .update({
+          status: 'available',
+          box_id: null, // Quitar caja asignada al restaurar
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', garmentId)
+
+      if (updateError) throw updateError
+
+      // Mostrar información - siempre sin caja después de restaurar
+      setRestoredGarmentInfo({
+        id: garment.id,
+        name: garment.name,
+        hasBox: false // Siempre false porque se quitó la caja al restaurar
+      })
+
+      // Recargar la lista de prendas en uso
+      await loadInUseGarments()
+
+      // Limpiar el mensaje después de 5 segundos
+      setTimeout(() => {
+        setRestoredGarmentInfo(null)
+      }, 5000)
+
+      console.log('✅ Prenda restaurada exitosamente')
+    } catch (error) {
+      console.error('❌ Error al restaurar prenda:', error)
+    } finally {
+      setRestoringGarmentId(null)
     }
   }
 
@@ -179,20 +234,21 @@ export default function AdminInUsePage() {
           ) : (
             <div className="space-y-2">
               {/* Desktop Table Header */}
-              <div className="hidden md:grid grid-cols-6 gap-4 p-3 bg-muted/50 rounded-lg font-semibold text-sm">
+              <div className="hidden md:grid grid-cols-7 gap-4 p-3 bg-muted/50 rounded-lg font-semibold text-sm">
                 <div>Prenda</div>
                 <div>Tipo</div>
                 <div>Dueño</div>
                 <div>Código</div>
                 <div>Fecha de Inicio</div>
                 <div>Días en Uso</div>
+                <div>Acciones</div>
               </div>
               {garments.map((garment) => {
                 const daysInUse = getDaysInUse(garment.last_used)
                 return (
                   <div
                     key={garment.id}
-                    className="grid grid-cols-1 md:grid-cols-6 gap-3 md:gap-4 p-3 md:p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4 p-3 md:p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                   >
                     {/* Mobile Card Layout */}
                     <div className="md:hidden space-y-2">
@@ -230,7 +286,9 @@ export default function AdminInUsePage() {
                             </Button>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Sin código</span>
+                          <Badge variant="destructive" className="text-xs">
+                            ⚠️ Sin código
+                          </Badge>
                         )}
                       </div>
                       <div className="flex items-center justify-between">
@@ -255,6 +313,27 @@ export default function AdminInUsePage() {
                             </span>
                           )}
                         </div>
+                      </div>
+                      <div className="mt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => restoreGarment(garment.id)}
+                          disabled={restoringGarmentId === garment.id}
+                          className="w-full"
+                        >
+                          {restoringGarmentId === garment.id ? (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                              Restaurando...
+                            </>
+                          ) : (
+                            <>
+                              <RotateCcw className="h-3 w-3 mr-2" />
+                              Restaurar al Closet
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </div>
 
@@ -293,7 +372,9 @@ export default function AdminInUsePage() {
                           </Button>
                         </>
                       ) : (
-                        <span className="text-xs text-muted-foreground">Sin código</span>
+                        <Badge variant="destructive" className="text-xs">
+                          ⚠️ Sin código
+                        </Badge>
                       )}
                     </div>
                     <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
@@ -316,6 +397,26 @@ export default function AdminInUsePage() {
                         </span>
                       )}
                     </div>
+                    <div className="hidden md:flex items-center">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => restoreGarment(garment.id)}
+                        disabled={restoringGarmentId === garment.id}
+                      >
+                        {restoringGarmentId === garment.id ? (
+                          <>
+                            <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
+                            Restaurando...
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw className="h-3 w-3 mr-2" />
+                            Restaurar
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 )
               })}
@@ -323,6 +424,40 @@ export default function AdminInUsePage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Alerta cuando se restaura una prenda - siempre sin caja */}
+      {restoredGarmentInfo && (
+        <Card className="border-2 border-yellow-200 dark:border-yellow-800">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold">
+                  ✅ Prenda "{restoredGarmentInfo.name}" restaurada al closet
+                </p>
+                <div className="mt-2 p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-yellow-600" />
+                    <p className="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                      ⚠️ Esta prenda NO tiene caja asignada
+                    </p>
+                  </div>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                    Asigna una caja a esta prenda desde el panel de organización para facilitar su localización.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setRestoredGarmentInfo(null)}
+              >
+                ✕
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

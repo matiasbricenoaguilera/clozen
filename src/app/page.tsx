@@ -1,7 +1,6 @@
 'use client'
 
 import Link from "next/link";
-import { Navbar } from "@/components/layout/navbar";
 import { Button } from "@/components/ui/button";
 import { SupabaseWarning } from "@/components/ui/supabase-warning";
 import { Shirt, Smartphone, Zap, Cloud } from "lucide-react";
@@ -10,7 +9,6 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
-      <Navbar />
 
       {!isSupabaseConfigured && (
         <div className="container mx-auto px-4 py-4">
