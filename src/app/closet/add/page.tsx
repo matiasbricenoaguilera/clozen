@@ -35,7 +35,7 @@ const STYLES = [
 ]
 
 export default function AddGarmentPage() {
-  const { userProfile } = useAuth()
+  const { userProfile, loading: authLoading } = useAuth()
   const router = useRouter()
   const [boxes, setBoxes] = useState<Box[]>([])
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -46,6 +46,7 @@ export default function AddGarmentPage() {
   const [manualNfcCode, setManualNfcCode] = useState<string>('')
   const [barcodeCode, setBarcodeCode] = useState<string>('')
   const [associatingNfc, setAssociatingNfc] = useState(false) // Estado para feedback visual NFC
+  const [accessDenied, setAccessDenied] = useState(false) // Estado para acceso denegado
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -57,8 +58,35 @@ export default function AddGarmentPage() {
   })
 
   useEffect(() => {
+    // Si Supabase no está configurado, permitir (modo demo)
+    if (!isSupabaseConfigured) {
+      fetchBoxes()
+      return
+    }
+
+    // Esperar a que la autenticación se resuelva
+    if (authLoading) {
+      return
+    }
+
+    // Si no hay usuario autenticado después de cargar, redirigir
+    if (!userProfile) {
+      router.push('/auth/login')
+      return
+    }
+
+    // Si el usuario no es admin, bloquear acceso
+    if (userProfile.role !== 'admin') {
+      setAccessDenied(true)
+      setTimeout(() => {
+        router.push('/closet')
+      }, 2000) // Redirigir después de 2 segundos
+      return
+    }
+
+    // Si es admin, cargar cajas normalmente
     fetchBoxes()
-  }, [])
+  }, [userProfile, authLoading, router])
 
   const fetchBoxes = async () => {
     // En modo demo, mostrar array vacío
@@ -415,6 +443,36 @@ export default function AddGarmentPage() {
         ? prev.style.filter(s => s !== style)
         : [...prev.style, style]
     }))
+  }
+
+  // Mostrar loading mientras se verifica el acceso
+  if (isSupabaseConfigured && authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Verificando acceso...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Mostrar mensaje de acceso denegado si el usuario no es admin
+  if (accessDenied) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center space-y-4 max-w-md">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <p className="font-semibold mb-2">Acceso Denegado</p>
+              <p>Solo los administradores pueden agregar prendas al sistema.</p>
+              <p className="text-sm mt-2">Redirigiendo al closet...</p>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    )
   }
 
   return (

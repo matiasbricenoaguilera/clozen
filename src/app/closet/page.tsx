@@ -301,12 +301,15 @@ export default function ClosetPage() {
             <Scan className="h-4 w-4 mr-2" />
             Escanear Prenda
           </Button>
-          <Link href="/closet/add">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar Prenda
-            </Button>
-          </Link>
+          {/* Solo mostrar botón de agregar si es admin */}
+          {userProfile?.role === 'admin' && (
+            <Link href="/closet/add">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Agregar Prenda
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -390,11 +393,13 @@ export default function ClosetPage() {
               : 'Comienza agregando tu primera prenda'
             }
           </p>
-          {!searchTerm && !selectedBox && (
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar Primera Prenda
-            </Button>
+          {!searchTerm && !selectedBox && userProfile?.role === 'admin' && (
+            <Link href="/closet/add">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Agregar Primera Prenda
+              </Button>
+            </Link>
           )}
         </div>
       ) : (
