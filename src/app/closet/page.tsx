@@ -103,12 +103,12 @@ export default function ClosetPage() {
 
       if (error) throw error
 
-      const boxesData = data || []
+      const boxesData: Box[] = data || []
       setBoxes(boxesData)
 
       // Crear mapa para acceso O(1) a nombres de cajas
       const boxesMapData = new Map<string, string>()
-      boxesData.forEach(box => {
+      boxesData.forEach((box: Box) => {
         boxesMapData.set(box.id, box.name)
       })
       setBoxesMap(boxesMapData)
