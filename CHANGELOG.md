@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado
+  - Validación automática con debounce de 500ms al ingresar códigos
+  - Alertas visuales (Alert) que muestran el nombre de la prenda que ya tiene el código
+  - Funciona tanto en la página de agregar prendas como en el modal de edición
+  - Validación al escanear tags NFC o ingresar códigos manualmente
+  - En el modal de edición, excluye la prenda actual de la validación para permitir ediciones sin falsos positivos
+  - Prevención de guardado si hay códigos duplicados
+
 ### Fixed
 - **Fix de carga infinita en autenticación**: Corregido problema donde la aplicación se quedaba cargando al iniciar sesión
   - Agregado timeout de 10 segundos para evitar que la consulta de perfil se quede colgada
