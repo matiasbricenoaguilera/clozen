@@ -47,6 +47,8 @@ export default function AddGarmentPage() {
   const [barcodeCode, setBarcodeCode] = useState<string>('')
   const [associatingNfc, setAssociatingNfc] = useState(false) // Estado para feedback visual NFC
   const [accessDenied, setAccessDenied] = useState(false) // Estado para acceso denegado
+  const [users, setUsers] = useState<Array<{ id: string; email: string; full_name: string | null }>>([])
+  const [selectedUserId, setSelectedUserId] = useState<string>('') // Usuario seleccionado para la prenda
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -84,9 +86,37 @@ export default function AddGarmentPage() {
       return
     }
 
-    // Si es admin, cargar cajas normalmente
+    // Si es admin, cargar cajas y usuarios
     fetchBoxes()
+    fetchUsers()
+    
+    // Inicializar usuario seleccionado con el admin actual
+    if (userProfile) {
+      setSelectedUserId(userProfile.id)
+    }
   }, [userProfile, authLoading, router])
+
+  const fetchUsers = async () => {
+    // En modo demo, mostrar array vacío
+    if (!isSupabaseConfigured) {
+      setUsers([])
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, full_name')
+        .order('full_name', { ascending: true, nullsFirst: false })
+        .order('email', { ascending: true })
+
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      setUsers([])
+    }
+  }
 
   const fetchBoxes = async () => {
     // En modo demo, mostrar array vacío
@@ -147,6 +177,14 @@ export default function AddGarmentPage() {
     if (!userProfile?.id) {
       throw new Error('Usuario no autenticado')
     }
+    
+    // Validar que se haya seleccionado un usuario dueño (si es admin)
+    if (userProfile.role === 'admin' && !selectedUserId) {
+      setError('Debes seleccionar el usuario dueño de la prenda')
+      setSaving(false)
+      return
+    }
+    
     console.log(`✅ Validación completada en ${Date.now() - validationStart}ms`)
 
     // En modo demo, simular guardado
@@ -184,7 +222,7 @@ export default function AddGarmentPage() {
 
         const fileExt = 'jpg' // Siempre usar .jpg ya que convertimos a JPEG
         const fileName = `${Date.now()}-${Math.random()}.${fileExt}`
-        const filePath = `garments/${userProfile.id}/${fileName}`
+        const filePath = `garments/${selectedUserId || userProfile?.id}/${fileName}`
 
         const { error: uploadError } = await supabase.storage
           .from('garments')
@@ -209,7 +247,7 @@ export default function AddGarmentPage() {
       // Crear prenda
       console.time('👕 Garment Insert Time')
       console.log('💾 Insertando prenda en BD:', {
-        userId: userProfile.id,
+        userId: selectedUserId || userProfile?.id,
         name: formData.name.trim(),
         type: formData.type,
         hasImage: !!imageUrl,
@@ -221,7 +259,7 @@ export default function AddGarmentPage() {
       const { data: garmentData, error: insertError } = await supabase
         .from('garments')
         .insert({
-          user_id: userProfile.id,
+          user_id: selectedUserId || userProfile?.id,
           name: formData.name.trim(),
           type: formData.type,
           season: formData.season,
@@ -517,6 +555,33 @@ export default function AddGarmentPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* Selector de usuario (solo para admins) */}
+                {userProfile?.role === 'admin' && (
+                  <div>
+                    <Label htmlFor="user">Usuario Dueño *</Label>
+                    <Select
+                      value={selectedUserId}
+                      onValueChange={setSelectedUserId}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona el usuario dueño" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map(user => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.full_name || user.email}
+                            {user.full_name && ` (${user.email})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Selecciona a quién pertenece esta prenda
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <Label htmlFor="name">Nombre *</Label>
                   <Input
