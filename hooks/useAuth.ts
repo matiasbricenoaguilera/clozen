@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { User as UserType } from '@/types'
@@ -10,6 +10,61 @@ export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [userProfile, setUserProfile] = useState<UserType | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const fetchUserProfile = useCallback(async (userId: string) => {
+    console.log('🔍 [useAuth] Obteniendo perfil para usuario:', userId)
+    
+    // Timeout de 10 segundos para evitar que se quede colgado
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout al obtener perfil')), 10000)
+    })
+
+    try {
+      const queryPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+
+      if (error) {
+        console.warn('❌ [useAuth] Error fetching user profile:', error)
+        console.warn('❌ [useAuth] Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        })
+        
+        // Si el usuario no existe en la tabla users, podría ser un problema de RLS
+        // o el usuario no fue creado correctamente durante el registro
+        if (error.code === 'PGRST116') {
+          console.warn('⚠️ [useAuth] Usuario no encontrado en tabla users. Esto puede indicar un problema con el registro.')
+        }
+        
+        setUserProfile(null)
+      } else {
+        console.log('✅ [useAuth] Perfil obtenido:', {
+          id: data.id,
+          email: data.email,
+          role: data.role,
+          full_name: data.full_name
+        })
+        setUserProfile(data)
+      }
+    } catch (error) {
+      console.error('❌ [useAuth] Excepción al obtener perfil:', error)
+      if (error instanceof Error && error.message === 'Timeout al obtener perfil') {
+        console.error('⏱️ [useAuth] Timeout: La consulta tardó más de 10 segundos. Verifica RLS y conexión.')
+      }
+      setUserProfile(null)
+    } finally {
+      // SIEMPRE establecer loading en false, incluso si hay errores
+      console.log('✅ [useAuth] Finalizando carga de perfil, estableciendo loading=false')
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     // Si Supabase no está configurado, marcar como no cargando
@@ -37,6 +92,7 @@ export function useAuth() {
     // Escuchar cambios de autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event: AuthChangeEvent, session: Session | null) => {
+        console.log('🔄 [useAuth] Auth state changed:', event)
         setSession(session)
         setUser(session?.user ?? null)
 
@@ -50,37 +106,7 @@ export function useAuth() {
     )
 
     return () => subscription.unsubscribe()
-  }, [])
-
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      console.log('🔍 [useAuth] Obteniendo perfil para usuario:', userId)
-      
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (error) {
-        console.warn('❌ [useAuth] Error fetching user profile:', error)
-        setUserProfile(null)
-      } else {
-        console.log('✅ [useAuth] Perfil obtenido:', {
-          id: data.id,
-          email: data.email,
-          role: data.role,
-          full_name: data.full_name
-        })
-        setUserProfile(data)
-      }
-    } catch (error) {
-      console.warn('❌ [useAuth] Error fetching user profile:', error)
-      setUserProfile(null)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [fetchUserProfile])
 
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
@@ -101,7 +127,8 @@ export function useAuth() {
       if (error) {
         console.error('❌ [useAuth] signIn: Error de autenticación:', error)
       } else {
-        console.log('✅ [useAuth] signIn: Login exitoso')
+        console.log('✅ [useAuth] signIn: Login exitoso, usuario:', data.user?.id)
+        // El onAuthStateChange se encargará de obtener el perfil
       }
       
       return { data, error }
