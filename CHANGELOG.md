@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Mapa de cajas para acceso O(1)
   - Estados de carga detallados y paralelos
   - Indicadores visuales mejorados
+- **Corrección TypeScript**: Tipado explícito para resolver errores de compilación en Netlify
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
