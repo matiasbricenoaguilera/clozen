@@ -95,9 +95,37 @@ export default function AdminBoxesPage() {
           .eq('id', editingBox.id)
 
         if (error) throw error
+
+        // Si hay un tag NFC, actualizar o crear registro en nfc_tags
+        if (formData.nfcTagId) {
+          // Primero eliminar cualquier registro anterior para este tag
+          await supabase
+            .from('nfc_tags')
+            .delete()
+            .eq('tag_id', formData.nfcTagId)
+
+          // Crear nuevo registro
+          const { error: nfcError } = await supabase
+            .from('nfc_tags')
+            .insert({
+              tag_id: formData.nfcTagId,
+              entity_type: 'box',
+              entity_id: editingBox.id,
+              created_by: userProfile?.id
+            })
+
+          if (nfcError) throw nfcError
+        } else {
+          // Si no hay tag NFC, eliminar cualquier registro existente para esta caja
+          await supabase
+            .from('nfc_tags')
+            .delete()
+            .eq('entity_type', 'box')
+            .eq('entity_id', editingBox.id)
+        }
       } else {
         // Crear nueva caja
-        const { error } = await supabase
+        const { data: newBox, error } = await supabase
           .from('boxes')
           .insert({
             name: formData.name,
@@ -106,8 +134,24 @@ export default function AdminBoxesPage() {
             nfc_tag_id: formData.nfcTagId || null,
             created_by: userProfile?.id
           })
+          .select()
+          .single()
 
         if (error) throw error
+
+        // Si hay un tag NFC, crear registro en nfc_tags
+        if (formData.nfcTagId && newBox) {
+          const { error: nfcError } = await supabase
+            .from('nfc_tags')
+            .insert({
+              tag_id: formData.nfcTagId,
+              entity_type: 'box',
+              entity_id: newBox.id,
+              created_by: userProfile?.id
+            })
+
+          if (nfcError) throw nfcError
+        }
       }
 
       await fetchBoxes()
@@ -130,6 +174,14 @@ export default function AdminBoxesPage() {
     }
 
     try {
+      // Primero eliminar el registro NFC si existe
+      await supabase
+        .from('nfc_tags')
+        .delete()
+        .eq('entity_type', 'box')
+        .eq('entity_id', boxId)
+
+      // Luego eliminar la caja
       const { error } = await supabase
         .from('boxes')
         .delete()
@@ -153,8 +205,45 @@ export default function AdminBoxesPage() {
     setDialogOpen(true)
   }
 
-  const handleNFCRead = (tagId: string) => {
-    setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+  const handleNFCRead = async (tagId: string) => {
+    // En modo demo, simplemente asignar el tag
+    if (!isSupabaseConfigured) {
+      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+      return
+    }
+
+    try {
+      // Verificar si el tag ya está asignado a otra caja
+      const { data: existingBox } = await supabase
+        .from('boxes')
+        .select('id, name')
+        .eq('nfc_tag_id', tagId)
+        .neq('id', editingBox?.id || '') // Excluir la caja actual si estamos editando
+        .single()
+
+      if (existingBox) {
+        alert(`Este tag NFC ya está asignado a la caja "${existingBox.name}". Por favor usa un tag diferente.`)
+        return
+      }
+
+      // Verificar si el tag está asignado a una prenda
+      const { data: existingGarment } = await supabase
+        .from('garments')
+        .select('id, name')
+        .eq('nfc_tag_id', tagId)
+        .single()
+
+      if (existingGarment) {
+        alert(`Este tag NFC ya está asignado a la prenda "${existingGarment.name}". Por favor usa un tag diferente.`)
+        return
+      }
+
+      // Si no hay conflictos, asignar el tag
+      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+    } catch (error) {
+      // Si no encuentra registros (que es lo esperado), continuar
+      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+    }
   }
 
   const resetForm = () => {

@@ -58,3 +58,5 @@ Si no ves las opciones de admin:
 ¿Necesitas ayuda con algún paso específico?</contents>
 </xai:function_call">Crea un archivo con instrucciones detalladas para crear cuenta admin
 
+
+
