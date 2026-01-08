@@ -44,6 +44,7 @@ export default function AddGarmentPage() {
   const [nfcMode, setNfcMode] = useState<'read' | 'write' | 'manual' | null>(null)
   const [selectedNfcTag, setSelectedNfcTag] = useState<string>('')
   const [manualNfcCode, setManualNfcCode] = useState<string>('')
+  const [associatingNfc, setAssociatingNfc] = useState(false) // Estado para feedback visual NFC
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -213,15 +214,22 @@ export default function AddGarmentPage() {
       return
     }
 
-    // Verificar si el tag ya está asociado (solo si tenemos acceso a la función)
+    setAssociatingNfc(true)
+    setError('')
+
     try {
+      // Simular un pequeño delay para mejor UX y feedback visual
+      await new Promise(resolve => setTimeout(resolve, 500))
+
       // Aquí podríamos verificar si el tag ya existe, pero por simplicidad
       // lo permitiremos y dejaremos que la base de datos maneje la validación
       setSelectedNfcTag(manualNfcCode.trim().toUpperCase())
+      setManualNfcCode('')
       setNfcMode(null)
-      setError('')
     } catch (error) {
-      setError('Error al validar el código NFC')
+      setError('Error al procesar el código NFC')
+    } finally {
+      setAssociatingNfc(false)
     }
   }
 
@@ -444,13 +452,25 @@ export default function AddGarmentPage() {
                       </p>
                     </div>
                     <div className="flex gap-2">
-                      <Button onClick={handleManualNfcSubmit} className="flex-1">
-                        Asociar Código
+                      <Button
+                        onClick={handleManualNfcSubmit}
+                        className="flex-1"
+                        disabled={associatingNfc}
+                      >
+                        {associatingNfc ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Asociando...
+                          </>
+                        ) : (
+                          'Asociar Código'
+                        )}
                       </Button>
                       <Button
                         onClick={() => setNfcMode(null)}
                         variant="outline"
                         className="flex-1"
+                        disabled={associatingNfc}
                       >
                         Cancelar
                       </Button>
