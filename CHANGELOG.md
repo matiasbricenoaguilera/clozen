@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prevención de guardado si hay códigos duplicados
 
 ### Fixed
+- **Fix de guardado de códigos NFC**: Corregido problema donde los códigos NFC no se guardaban correctamente
+  - Normalización automática de códigos NFC: se limpian espacios y se convierten a mayúsculas antes de guardar
+  - Normalización aplicada tanto al leer desde scanner como al ingresar manualmente
+  - Mejor manejo de errores con logging detallado para diagnóstico
+  - Corrección aplicada en página de agregar prendas y modal de edición
+  - Validación de duplicados también usa códigos normalizados para consistencia
 - **Fix de carga infinita en autenticación**: Corregido problema donde la aplicación se quedaba cargando al iniciar sesión
   - Agregado timeout de 10 segundos para evitar que la consulta de perfil se quede colgada
   - Mejorado manejo de errores con logging detallado para diagnóstico
