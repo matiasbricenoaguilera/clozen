@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
-import { Shirt, Sun, Moon, LogOut, Settings } from 'lucide-react'
+import { Shirt, Sun, Moon, LogOut, Settings, Package } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
