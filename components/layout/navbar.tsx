@@ -2,11 +2,17 @@
 
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
-import { Shirt, Sun, Moon } from 'lucide-react'
+import { Shirt, Sun, Moon, LogOut, Settings } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
+  const { userProfile, logout } = useAuth()
+
+  const handleLogout = async () => {
+    await logout()
+  }
 
   return (
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -28,18 +34,48 @@ export function Navbar() {
             <span className="sr-only">Cambiar tema</span>
           </Button>
 
+          {/* Navigation Links - Show when authenticated */}
+          {userProfile && (
+            <div className="flex items-center space-x-2">
+              <Link href="/closet">
+                <Button variant="ghost" size="sm">
+                  Mi Closet
+                </Button>
+              </Link>
+
+              {/* Admin Panel - Show only for admins */}
+              {userProfile.role === 'admin' && (
+                <Link href="/admin/boxes">
+                  <Button variant="outline" size="sm">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Panel Admin
+                  </Button>
+                </Link>
+              )}
+            </div>
+          )}
+
           {/* Auth Buttons */}
           <div className="flex items-center space-x-2">
-            <Link href="/auth/login">
-              <Button variant="ghost" size="sm">
-                Iniciar sesión
+            {userProfile ? (
+              <Button variant="ghost" size="sm" onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Cerrar sesión
               </Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button size="sm">
-                Registrarse
-              </Button>
-            </Link>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <Button variant="ghost" size="sm">
+                    Iniciar sesión
+                  </Button>
+                </Link>
+                <Link href="/auth/register">
+                  <Button size="sm">
+                    Registrarse
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
