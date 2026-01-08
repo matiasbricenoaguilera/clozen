@@ -800,39 +800,22 @@ export default function ClosetPage() {
   // Manejar cambios en el input con optimización para Scanner Keyboard
   const handleBatchCodesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
-    const now = Date.now()
-    const timeSinceLastChange = now - lastChangeTimeRef.current
     
-    // Detectar si es escritura rápida (Scanner Keyboard) vs escritura normal
-    // Si el cambio es muy grande (>3 caracteres de diferencia) o muy rápido (<50ms), probablemente es Scanner Keyboard
-    const changeSize = Math.abs(newValue.length - batchCodesRef.current.length)
-    const isFastTyping = timeSinceLastChange < 50 && changeSize <= 3
+    // SIEMPRE actualizar el estado inmediatamente para que el input muestre todos los caracteres
+    // Esto es crítico para Scanner Keyboard que escribe rápido
+    setBatchCodes(newValue)
     
-    // Actualizar la referencia inmediatamente
+    // Actualizar la referencia inmediatamente con el valor completo del input
     batchCodesRef.current = newValue
     
-    // Si es escritura muy rápida (Scanner Keyboard), usar debounce para evitar múltiples renders
-    if (isFastTyping) {
-      // Limpiar timer anterior
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current)
-      }
-      
-      // Actualizar después de un pequeño delay (cuando termine de escribir)
-      debounceTimerRef.current = setTimeout(() => {
-        setBatchCodes(batchCodesRef.current)
-        debounceTimerRef.current = null
-      }, 200) // 200ms después de que deje de escribir
-    } else {
-      // Para escritura normal o cambios grandes (pegado), actualizar inmediatamente
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current)
-        debounceTimerRef.current = null
-      }
-      setBatchCodes(newValue)
+    // Limpiar cualquier debounce pendiente cuando hay cambios
+    // El debounce solo se usaría para optimizar cálculos pesados, no para actualizar el input
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
     }
     
-    lastChangeTimeRef.current = now
+    lastChangeTimeRef.current = Date.now()
   }, [])
 
   // Manejar pegado de códigos con separador automático (optimizado)
