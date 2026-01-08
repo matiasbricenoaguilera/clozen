@@ -653,8 +653,8 @@ export default function ClosetPage() {
         .in('id', garmentIds)
 
       // Verificar que los códigos se mantuvieron
-      const lostCodes = updatedGarments?.filter(g => {
-        const original = foundGarmentsBatch.find(og => og.id === g.id)
+      const lostCodes = updatedGarments?.filter((g: Garment) => {
+        const original = foundGarmentsBatch.find((og: Garment) => og.id === g.id)
         if (!original) return false
         return (original.nfc_tag_id && !g.nfc_tag_id) || (original.barcode_id && !g.barcode_id)
       })
