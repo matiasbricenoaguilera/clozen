@@ -363,10 +363,12 @@ export function EditGarmentModal({
           <div>
             <Label>Imagen</Label>
             <FileUpload
-              onFileSelect={handleImageSelect}
+              onFileSelect={(file) => handleImageSelect(file)}
+              onFileRemove={() => handleImageSelect(null)}
+              selectedFile={selectedImage}
               accept="image/*"
             />
-            {imagePreview && (
+            {imagePreview && !selectedImage && (
               <div className="mt-2">
                 <img
                   src={imagePreview}
