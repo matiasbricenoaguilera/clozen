@@ -133,12 +133,13 @@ export function EditGarmentModal({
     const normalizedTag = nfcTag.trim().toUpperCase()
 
     try {
+      // OPTIMIZACIÓN: Usar maybeSingle en lugar de single para mejor rendimiento
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
         .eq('nfc_tag_id', normalizedTag)
         .neq('id', garment.id) // Excluir la prenda actual
-        .single()
+        .maybeSingle()
 
       if (data && !error) {
         setNfcDuplicate({ exists: true, garmentName: data.name })
@@ -159,12 +160,13 @@ export function EditGarmentModal({
     }
 
     try {
+      // OPTIMIZACIÓN: Usar maybeSingle en lugar de single para mejor rendimiento
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
         .eq('barcode_id', barcode.trim())
         .neq('id', garment.id) // Excluir la prenda actual
-        .single()
+        .maybeSingle()
 
       if (data && !error) {
         setBarcodeDuplicate({ exists: true, garmentName: data.name })

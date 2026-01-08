@@ -55,29 +55,28 @@ export default function AdminOrganizePage() {
 
       if (boxesError) throw boxesError
 
-      // Obtener conteo real de prendas disponibles por caja
-      const boxesWithCount = await Promise.all(
-        (boxesData || []).map(async (box: any) => {
-          const { count, error: countError } = await supabase
-            .from('garments')
-            .select('*', { count: 'exact', head: true })
-            .eq('box_id', box.id)
-            .eq('status', 'available') // Solo contar prendas disponibles
-          
-          if (countError) {
-            console.error('Error counting garments for box:', box.id, countError)
-            return {
-              ...box,
-              garment_count: 0
-            }
-          }
-          
-          return {
-            ...box,
-            garment_count: count || 0
+      // OPTIMIZACIÓN: Obtener todos los conteos en una sola consulta
+      const { data: garmentsCountData } = await supabase
+        .from('garments')
+        .select('box_id')
+        .eq('status', 'available')
+        .not('box_id', 'is', null)
+
+      // Crear mapa de conteos
+      const countMap = new Map<string, number>()
+      if (garmentsCountData) {
+        garmentsCountData.forEach((item: any) => {
+          if (item.box_id) {
+            countMap.set(item.box_id, (countMap.get(item.box_id) || 0) + 1)
           }
         })
-      )
+      }
+
+      // Combinar datos con conteos
+      const boxesWithCount = (boxesData || []).map((box: any) => ({
+        ...box,
+        garment_count: countMap.get(box.id) || 0
+      }))
 
       setGarments(garmentsData || [])
       setBoxes(boxesWithCount)
