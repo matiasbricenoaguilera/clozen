@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Navegación condicional**: Panel Admin visible solo para administradores en el navbar
 - **Corrección logout**: Usar signOut en lugar de logout del hook useAuth
 - **Sistema Clozen completo**: Implementación total del sistema familiar de organización de ropa
+- **Documentación crítica**: Guía para políticas RLS requeridas para deploy exitoso
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
