@@ -67,13 +67,24 @@ export default function AddGarmentPage() {
     }
 
     try {
+      // Obtener cajas con conteo de prendas
       const { data, error } = await supabase
         .from('boxes')
-        .select('*')
+        .select(`
+          *,
+          garments(count)
+        `)
         .order('name')
 
       if (error) throw error
-      setBoxes(data || [])
+
+      // Transformar los datos para incluir el conteo
+      const boxesWithCount = (data || []).map(box => ({
+        ...box,
+        garment_count: box.garments?.[0]?.count || 0
+      }))
+
+      setBoxes(boxesWithCount)
     } catch (error) {
       console.error('Error fetching boxes:', error)
       // En caso de error, mostrar array vacío
@@ -349,6 +360,11 @@ export default function AddGarmentPage() {
                       {boxes.map(box => (
                         <SelectItem key={box.id} value={box.id}>
                           {box.name}
+                          {box.garment_count !== undefined && (
+                            <span className="text-muted-foreground text-xs ml-2">
+                              ({box.garment_count} prendas)
+                            </span>
+                          )}
                         </SelectItem>
                       ))}
                     </SelectContent>
