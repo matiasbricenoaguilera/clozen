@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Scripts SQL completos**: SUPABASE_SCHEMA_COMPLETE.sql y VERIFICACION_SCHEMA.sql para resolver problemas de schema cache
 - **Corrección supabase.raw**: Reemplazar función inexistente con lógica de cliente en withdrawGarment
 - **Mejoras completas en Organizar**: Navbar sticky, modal de cajas, selector manual con recomendaciones, mover/quitar prendas
+- **Restricción de agregar prendas**: Solo administradores pueden agregar prendas, usuarios normales solo pueden ver y usar
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
