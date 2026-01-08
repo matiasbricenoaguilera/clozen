@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,14 +27,40 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const { error } = await signIn(email, password)
+      const { data, error } = await signIn(email, password)
 
       if (error) {
         setError(error.message)
+        setLoading(false)
+        return
+      }
+
+      // Si el login fue exitoso, obtener el perfil del usuario para verificar su rol
+      if (data?.user) {
+        const { data: userProfile, error: profileError } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', data.user.id)
+          .single()
+
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError)
+          // Si hay error obteniendo el perfil, redirigir al closet por defecto
+          router.push('/closet')
+        } else {
+          // Redirigir según el rol del usuario
+          if (userProfile?.role === 'admin') {
+            router.push('/') // Admin va al home
+          } else {
+            router.push('/closet') // Usuario normal va al closet
+          }
+        }
       } else {
+        // Si no hay data.user, redirigir al closet por defecto
         router.push('/closet')
       }
     } catch (err) {
+      console.error('Login error:', err)
       setError('Ocurrió un error inesperado')
     } finally {
       setLoading(false)
