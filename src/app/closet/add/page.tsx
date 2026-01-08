@@ -41,8 +41,9 @@ export default function AddGarmentPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [nfcMode, setNfcMode] = useState<'read' | 'write' | null>(null)
+  const [nfcMode, setNfcMode] = useState<'read' | 'write' | 'manual' | null>(null)
   const [selectedNfcTag, setSelectedNfcTag] = useState<string>('')
+  const [manualNfcCode, setManualNfcCode] = useState<string>('')
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -186,7 +187,42 @@ export default function AddGarmentPage() {
 
   const handleClearNfcTag = () => {
     setSelectedNfcTag('')
+    setManualNfcCode('')
     setNfcMode(null)
+  }
+
+  // Validar formato de código NFC manual
+  const validateNfcCode = (code: string): boolean => {
+    // Formatos válidos:
+    // - MAC address: XX:XX:XX:XX:XX:XX
+    // - Hexadecimal largo: al menos 8 caracteres hexadecimales
+    const macRegex = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
+    const hexRegex = /^[0-9A-Fa-f]{8,}$/
+
+    return macRegex.test(code) || hexRegex.test(code)
+  }
+
+  const handleManualNfcSubmit = async () => {
+    if (!manualNfcCode.trim()) {
+      setError('Ingresa un código NFC válido')
+      return
+    }
+
+    if (!validateNfcCode(manualNfcCode.trim())) {
+      setError('Formato inválido. Usa formato MAC (XX:XX:XX:XX:XX:XX) o código hexadecimal largo')
+      return
+    }
+
+    // Verificar si el tag ya está asociado (solo si tenemos acceso a la función)
+    try {
+      // Aquí podríamos verificar si el tag ya existe, pero por simplicidad
+      // lo permitiremos y dejaremos que la base de datos maneje la validación
+      setSelectedNfcTag(manualNfcCode.trim().toUpperCase())
+      setNfcMode(null)
+      setError('')
+    } catch (error) {
+      setError('Error al validar el código NFC')
+    }
   }
 
   const toggleStyle = (style: string) => {
@@ -392,6 +428,34 @@ export default function AddGarmentPage() {
                       </div>
                     </div>
                   </div>
+                ) : nfcMode === 'manual' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="manual-nfc">Código NFC</Label>
+                      <Input
+                        id="manual-nfc"
+                        value={manualNfcCode}
+                        onChange={(e) => setManualNfcCode(e.target.value)}
+                        placeholder="Ej: AA:BB:CC:DD:EE:FF o ABC123456789"
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ingresa el código que obtuviste de tu app NFC. Formatos válidos: MAC (XX:XX:XX:XX:XX:XX) o hexadecimal largo.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleManualNfcSubmit} className="flex-1">
+                        Asociar Código
+                      </Button>
+                      <Button
+                        onClick={() => setNfcMode(null)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
                 ) : nfcMode ? (
                   <NFCScanner
                     mode={nfcMode}
@@ -410,26 +474,37 @@ export default function AddGarmentPage() {
                     <p className="text-sm text-muted-foreground">
                       Elige cómo quieres asociar un tag NFC a esta prenda:
                     </p>
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-1 gap-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setNfcMode('read')}
+                          className="text-sm"
+                        >
+                          Escanear Tag Existente
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setNfcMode('write')}
+                          className="text-sm"
+                        >
+                          Crear Nuevo Tag
+                        </Button>
+                      </div>
                       <Button
                         variant="outline"
-                        onClick={() => setNfcMode('read')}
-                        className="flex-1"
+                        onClick={() => setNfcMode('manual')}
+                        className="w-full text-sm"
                       >
-                        Escanear Tag Existente
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setNfcMode('write')}
-                        className="flex-1"
-                      >
-                        Crear Nuevo Tag
+                        📝 Ingresar Código Manualmente
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      • <strong>Escanear:</strong> Lee un tag que ya tenga información
+                      • <strong>Escanear:</strong> Lee un tag que ya tenga información (requiere NFC)
                       <br />
-                      • <strong>Crear:</strong> Genera un nuevo ID y lo escribe en un tag vacío
+                      • <strong>Crear:</strong> Genera un nuevo ID y lo escribe en un tag vacío (requiere NFC)
+                      <br />
+                      • <strong>Manual:</strong> Ingresa un código NFC que obtuviste de otra app
                     </p>
                   </div>
                 )}
