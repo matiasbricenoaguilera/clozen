@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prevención de guardado si hay códigos duplicados
 
 ### Fixed
+- **Fix de redirección durante guardado**: Corregido problema donde la aplicación redirigía al login durante el proceso de guardado de prendas con código NFC
+  - Agregada protección en useEffect para evitar redirecciones cuando `saving === true`
+  - Previene que cambios temporales en `userProfile` durante el guardado causen redirecciones no deseadas
+  - Mejora la experiencia de usuario al evitar interrupciones durante el proceso de guardado
 - **Fix de guardado de códigos NFC**: Corregido problema donde los códigos NFC no se guardaban correctamente
   - Normalización automática de códigos NFC: se limpian espacios y se convierten a mayúsculas antes de guardar
   - Normalización aplicada tanto al leer desde scanner como al ingresar manualmente
