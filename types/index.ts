@@ -9,7 +9,9 @@ export type User = Tables<'users'>
 export type UserRole = 'user' | 'admin'
 
 // Box types
-export type Box = Tables<'boxes'>
+export type Box = Tables<'boxes'> & {
+  garment_count?: number
+}
 
 // Garment types
 export type Garment = Tables<'garments'>

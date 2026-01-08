@@ -126,7 +126,13 @@ DROP POLICY IF EXISTS "Users can insert their own history" ON public.usage_histo
 CREATE POLICY "Users can insert their own history" ON public.usage_history
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Políticas para cajas (solo admin puede gestionar)
+-- Políticas para cajas
+-- Todos pueden VER cajas públicas
+DROP POLICY IF EXISTS "Anyone can view boxes" ON public.boxes;
+CREATE POLICY "Anyone can view boxes" ON public.boxes
+  FOR SELECT USING (true);
+
+-- Solo admins pueden CREAR, EDITAR y ELIMINAR cajas
 DROP POLICY IF EXISTS "Admins can manage boxes" ON public.boxes;
 CREATE POLICY "Admins can manage boxes" ON public.boxes
   FOR ALL USING (
