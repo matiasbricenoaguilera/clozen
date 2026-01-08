@@ -73,6 +73,11 @@ export default function AddGarmentPage() {
       return
     }
 
+    // NO redirigir si estamos guardando una prenda (evita redirecciones durante el proceso)
+    if (saving) {
+      return
+    }
+
     // Si no hay usuario autenticado después de cargar, redirigir
     if (!userProfile) {
       router.push('/auth/login')
@@ -96,7 +101,7 @@ export default function AddGarmentPage() {
     if (userProfile) {
       setSelectedUserId(userProfile.id)
     }
-  }, [userProfile, authLoading, router])
+  }, [userProfile, authLoading, router, saving]) // Agregar saving a las dependencias
 
   const fetchUsers = async () => {
     // En modo demo, mostrar array vacío
