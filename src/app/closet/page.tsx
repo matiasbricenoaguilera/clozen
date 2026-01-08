@@ -461,20 +461,35 @@ export default function ClosetPage() {
         return
       }
 
-      console.log('🔍 Buscando códigos (optimizado):', codes.length)
+      // Limitar cantidad de códigos para evitar consultas muy grandes
+      const maxCodes = 50
+      const codesToSearch = codes.slice(0, maxCodes)
+      if (codes.length > maxCodes) {
+        setNfcError(`⚠️ Se buscarán solo los primeros ${maxCodes} códigos de ${codes.length} ingresados`)
+      }
 
-      // OPTIMIZACIÓN: Buscar todas las prendas en paralelo con una sola consulta por tipo
-      // Buscar todas las prendas con códigos NFC en una sola consulta
-      const { data: garmentsByNfc, error: nfcError } = await supabase
-        .from('garments')
-        .select('*')
-        .in('nfc_tag_id', codes)
+      console.log('🔍 Buscando códigos (optimizado):', codesToSearch.length)
 
-      // Buscar todas las prendas con códigos barcode en una sola consulta
-      const { data: garmentsByBarcode, error: barcodeError } = await supabase
-        .from('garments')
-        .select('*')
-        .in('barcode_id', codes)
+      // OPTIMIZACIÓN: Ejecutar ambas consultas en paralelo con Promise.all
+      // Seleccionar solo campos necesarios para mejor rendimiento
+      // OPTIMIZACIÓN: Usar una sola consulta con OR cuando sea posible (más eficiente)
+      const [nfcResult, barcodeResult] = await Promise.all([
+        codesToSearch.length > 0 
+          ? supabase
+              .from('garments')
+              .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
+              .in('nfc_tag_id', codesToSearch)
+          : Promise.resolve({ data: null, error: null }),
+        codesToSearch.length > 0
+          ? supabase
+              .from('garments')
+              .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at, user_id')
+              .in('barcode_id', codesToSearch)
+          : Promise.resolve({ data: null, error: null })
+      ])
+
+      const { data: garmentsByNfc, error: nfcError } = nfcResult
+      const { data: garmentsByBarcode, error: barcodeError } = barcodeResult
 
       if (nfcError) console.error('Error buscando NFC:', nfcError)
       if (barcodeError) console.error('Error buscando Barcode:', barcodeError)
