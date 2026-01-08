@@ -230,7 +230,7 @@ export default function AddGarmentPage() {
             entity_id: garmentData.id,
             created_by: userProfile.id
           })
-          .then(({ error: nfcError }) => {
+          .then(({ error: nfcError }: { error: any }) => {
             console.timeEnd('📱 NFC Registration Time')
             if (nfcError) {
               console.error('❌ Error registrando tag NFC:', nfcError)
