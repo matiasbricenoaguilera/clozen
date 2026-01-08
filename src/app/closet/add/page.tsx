@@ -150,7 +150,7 @@ export default function AddGarmentPage() {
           image_url: imageUrl,
           box_id: formData.boxId || null,
           nfc_tag_id: selectedNfcTag || null,
-          barcode_id: barcodeCode.trim() || null
+          barcode_id: barcodeCode.trim() || null,
           status: 'available'
         })
         .select()
