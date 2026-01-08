@@ -45,12 +45,20 @@ export function Navbar() {
 
               {/* Admin Panel - Show only for admins */}
               {userProfile.role === 'admin' && (
-                <Link href="/admin/boxes">
-                  <Button variant="outline" size="sm">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Panel Admin
-                  </Button>
-                </Link>
+                <div className="flex gap-2">
+                  <Link href="/admin/organize">
+                    <Button variant="outline" size="sm">
+                      <Package className="h-4 w-4 mr-2" />
+                      Organizar
+                    </Button>
+                  </Link>
+                  <Link href="/admin/boxes">
+                    <Button variant="outline" size="sm">
+                      <Settings className="h-4 w-4 mr-2" />
+                      Cajas
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
           )}

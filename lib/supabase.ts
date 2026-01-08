@@ -136,6 +136,8 @@ export type Database = {
           image_url: string | null
           box_id: string | null
           nfc_tag_id: string | null
+          barcode_id: string | null
+          status: 'available' | 'in_use'
           last_used: string | null
           usage_count: number
           created_at: string
@@ -152,6 +154,8 @@ export type Database = {
           image_url?: string | null
           box_id?: string | null
           nfc_tag_id?: string | null
+          barcode_id?: string | null
+          status?: 'available' | 'in_use'
           last_used?: string | null
           usage_count?: number
           created_at?: string
@@ -168,6 +172,8 @@ export type Database = {
           image_url?: string | null
           box_id?: string | null
           nfc_tag_id?: string | null
+          barcode_id?: string | null
+          status?: 'available' | 'in_use'
           last_used?: string | null
           usage_count?: number
           created_at?: string

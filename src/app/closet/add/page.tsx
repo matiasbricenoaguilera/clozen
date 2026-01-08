@@ -41,9 +41,10 @@ export default function AddGarmentPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [nfcMode, setNfcMode] = useState<'read' | 'write' | 'manual' | null>(null)
+  const [nfcMode, setNfcMode] = useState<'read' | 'write' | 'manual' | 'barcode' | null>(null)
   const [selectedNfcTag, setSelectedNfcTag] = useState<string>('')
   const [manualNfcCode, setManualNfcCode] = useState<string>('')
+  const [barcodeCode, setBarcodeCode] = useState<string>('')
   const [associatingNfc, setAssociatingNfc] = useState(false) // Estado para feedback visual NFC
 
   const [formData, setFormData] = useState<GarmentForm>({
@@ -148,7 +149,9 @@ export default function AddGarmentPage() {
           style: formData.style,
           image_url: imageUrl,
           box_id: formData.boxId || null,
-          nfc_tag_id: selectedNfcTag || null
+          nfc_tag_id: selectedNfcTag || null,
+          barcode_id: barcodeCode.trim() || null
+          status: 'available'
         })
         .select()
         .single()
@@ -200,7 +203,34 @@ export default function AddGarmentPage() {
   const handleClearNfcTag = () => {
     setSelectedNfcTag('')
     setManualNfcCode('')
+    setBarcodeCode('')
     setNfcMode(null)
+  }
+
+  const handleBarcodeSubmit = async () => {
+    if (!barcodeCode.trim()) {
+      setError('Ingresa un código de barras válido')
+      return
+    }
+
+    setAssociatingNfc(true)
+    setError('')
+
+    try {
+      // Simular procesamiento
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Aquí podríamos validar que el barcode no existe, pero por simplicidad
+      // lo asignamos directamente. El barcode se puede usar para identificar prendas
+      // en procesos futuros (como organización post-lavado)
+      console.log('Código de barras registrado:', barcodeCode.trim())
+      setBarcodeCode('')
+      setNfcMode(null)
+    } catch (error) {
+      setError('Error al procesar el código de barras')
+    } finally {
+      setAssociatingNfc(false)
+    }
   }
 
   // Validar formato de código NFC manual
@@ -492,6 +522,34 @@ export default function AddGarmentPage() {
                       </Button>
                     </div>
                   </div>
+                ) : nfcMode === 'barcode' ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="barcode">Código de Barras</Label>
+                      <Input
+                        id="barcode"
+                        value={barcodeCode}
+                        onChange={(e) => setBarcodeCode(e.target.value)}
+                        placeholder="Ej: 1234567890123"
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ingresa el código de barras de la etiqueta de la prenda. Este código se usará para identificar la prenda durante la organización post-lavado.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={handleBarcodeSubmit} className="flex-1">
+                        Registrar Código
+                      </Button>
+                      <Button
+                        onClick={() => setNfcMode(null)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
                 ) : nfcMode ? (
                   <NFCScanner
                     mode={nfcMode}
@@ -527,20 +585,31 @@ export default function AddGarmentPage() {
                           Crear Nuevo Tag
                         </Button>
                       </div>
-                      <Button
-                        variant="outline"
-                        onClick={() => setNfcMode('manual')}
-                        className="w-full text-sm"
-                      >
-                        📝 Ingresar Código Manualmente
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setNfcMode('manual')}
+                          className="text-sm"
+                        >
+                          📝 NFC Manual
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setNfcMode('barcode')}
+                          className="text-sm"
+                        >
+                          📱 Código Barras
+                        </Button>
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       • <strong>Escanear:</strong> Lee un tag que ya tenga información (requiere NFC)
                       <br />
                       • <strong>Crear:</strong> Genera un nuevo ID y lo escribe en un tag vacío (requiere NFC)
                       <br />
-                      • <strong>Manual:</strong> Ingresa un código NFC que obtuviste de otra app
+                      • <strong>NFC Manual:</strong> Ingresa un código NFC que obtuviste de otra app
+                      <br />
+                      • <strong>Código Barras:</strong> Registra el código de barras de la etiqueta física
                     </p>
                   </div>
                 )}

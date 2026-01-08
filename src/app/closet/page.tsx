@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan } from 'lucide-react'
+import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
 import type { Garment, Box } from '@/types'
 
@@ -28,6 +28,7 @@ export default function ClosetPage() {
   const [showNFCScanner, setShowNFCScanner] = useState(false)
   const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
   const [nfcError, setNfcError] = useState('')
+  const [forgottenGarments, setForgottenGarments] = useState<Garment[]>([])
 
   useEffect(() => {
     // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
@@ -41,8 +42,8 @@ export default function ClosetPage() {
 
     // En modo real, esperar a que la autenticación se resuelva
     if (!authLoading && userProfile) {
-      // Ejecutar ambas consultas en paralelo para mejor rendimiento
-      Promise.all([fetchGarments(), fetchBoxes()]).finally(() => {
+      // Ejecutar consultas en paralelo para mejor rendimiento
+      Promise.all([fetchGarments(), fetchBoxes(), fetchForgottenGarments()]).finally(() => {
         setLoading(false)
       })
     } else if (!authLoading && !userProfile) {
@@ -50,6 +51,7 @@ export default function ClosetPage() {
       setGarments([])
       setBoxes([])
       setBoxesMap(new Map())
+      setForgottenGarments([])
       setLoading(false)
     }
   }, [userProfile, authLoading, isSupabaseConfigured])
@@ -65,13 +67,14 @@ export default function ClosetPage() {
     }
 
     try {
-      // Optimización: quitar JOIN innecesario y agregar límite
+      // Optimización: incluir nuevos campos y filtrar por status available
       const { data, error } = await supabase
         .from('garments')
-        .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, usage_count, created_at')
+        .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at')
         .eq('user_id', userProfile?.id)
-        .order('created_at', { ascending: false })
-        .limit(100) // Limitar a 100 prendas para mejor rendimiento
+        .eq('status', 'available') // Solo mostrar prendas disponibles
+        .order('last_used', { ascending: true, nullsFirst: false }) // Priorizar prendas menos usadas
+        .limit(100)
 
       if (error) throw error
       setGarments(data || [])
@@ -141,6 +144,66 @@ export default function ClosetPage() {
     setLoading(false)
   }
 
+  // Función para obtener prendas olvidadas (recomendaciones inteligentes)
+  const fetchForgottenGarments = async () => {
+    if (!userProfile) return
+
+    try {
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+      const { data, error } = await supabase
+        .from('garments')
+        .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, usage_count, last_used, created_at')
+        .eq('user_id', userProfile.id)
+        .eq('status', 'available')
+        .or(`last_used.lt.${thirtyDaysAgo.toISOString()},usage_count.lt.3`)
+        .order('last_used', { ascending: true, nullsFirst: true })
+        .limit(6) // Mostrar top 6 prendas olvidadas
+
+      if (error) throw error
+      setForgottenGarments(data || [])
+    } catch (error) {
+      console.error('Error fetching forgotten garments:', error)
+      setForgottenGarments([])
+    }
+  }
+
+  // Función para retirar una prenda (marcar como in_use)
+  const withdrawGarment = async (garmentId: string) => {
+    if (!userProfile) return
+
+    try {
+      const { error } = await supabase
+        .from('garments')
+        .update({
+          status: 'in_use',
+          last_used: new Date().toISOString(),
+          usage_count: supabase.raw('usage_count + 1')
+        })
+        .eq('id', garmentId)
+        .eq('user_id', userProfile.id) // Solo permitir retirar prendas propias
+
+      if (error) throw error
+
+      // Registrar en historial de uso
+      await supabase
+        .from('usage_history')
+        .insert({
+          user_id: userProfile.id,
+          garment_id: garmentId,
+          usage_type: 'manual',
+          created_at: new Date().toISOString()
+        })
+
+      // Refrescar datos para actualizar la vista
+      await fetchGarments()
+    } catch (error) {
+      console.error('Error al retirar prenda:', error)
+      // Aquí podríamos mostrar un toast de error
+    }
+  }
+
   const handleNFCScanSuccess = async (tagId: string) => {
     try {
       const result = await findEntityByNFCTag(tagId)
@@ -203,9 +266,17 @@ export default function ClosetPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Mi Closet</h1>
-          <p className="text-muted-foreground">
-            {filteredGarments.length} prendas en total
-          </p>
+          <div className="flex flex-wrap gap-4 mt-2">
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{filteredGarments.length}</span> prendas disponibles
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{forgottenGarments.length}</span> prendas olvidadas
+            </div>
+            <div className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{boxes.length}</span> cajas compartidas
+            </div>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button
@@ -223,6 +294,50 @@ export default function ClosetPage() {
           </Link>
         </div>
       </div>
+
+      {/* Forgotten Garments Section */}
+      {forgottenGarments.length > 0 && (
+        <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+            <h3 className="font-semibold text-yellow-900 dark:text-yellow-100">
+              🧠 Prendas que quizás olvidaste
+            </h3>
+          </div>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300 mb-3">
+            Estas prendas no se han usado recientemente. ¡Es hora de darles una segunda oportunidad!
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {forgottenGarments.map(garment => (
+              <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border shadow-sm">
+                <div className="aspect-square bg-muted rounded mb-2 flex items-center justify-center">
+                  {garment.image_url ? (
+                    <img
+                      src={garment.image_url}
+                      alt={garment.name}
+                      className="w-full h-full object-cover rounded"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <Shirt className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+                <p className="text-xs font-medium truncate">{garment.name}</p>
+                <p className="text-xs text-muted-foreground">{garment.type}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => withdrawGarment(garment.id)}
+                  className="w-full mt-2 text-xs"
+                >
+                  <Hand className="h-3 w-3 mr-1" />
+                  Usar
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -305,6 +420,11 @@ export default function ClosetPage() {
                       NFC
                     </Badge>
                   )}
+                  {garment.barcode_id && (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      📱 Barcode
+                    </Badge>
+                  )}
                   {garment.color && (
                     <Badge variant="outline">{garment.color}</Badge>
                   )}
@@ -312,11 +432,31 @@ export default function ClosetPage() {
                     <Badge variant="outline">{garment.season}</Badge>
                   )}
                 </div>
-                {garment.usage_count > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Usada {garment.usage_count} {garment.usage_count === 1 ? 'vez' : 'veces'}
-                  </p>
-                )}
+
+                {/* Información de uso */}
+                <div className="flex items-center justify-between mt-2">
+                  <div className="text-xs text-muted-foreground">
+                    {garment.usage_count > 0 && (
+                      <span>Usada {garment.usage_count} {garment.usage_count === 1 ? 'vez' : 'veces'}</span>
+                    )}
+                    {garment.last_used && (
+                      <span className="ml-2">
+                        Último uso: {new Date(garment.last_used).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Botón de retirar */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => withdrawGarment(garment.id)}
+                    className="text-xs"
+                  >
+                    <Hand className="h-3 w-3 mr-1" />
+                    Retirar
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

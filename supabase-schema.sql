@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS public.garments (
   image_url TEXT,
   box_id UUID REFERENCES public.boxes(id),
   nfc_tag_id TEXT UNIQUE,
+  barcode_id TEXT UNIQUE, -- Nuevo: soporte para códigos de barras
+  status TEXT NOT NULL DEFAULT 'available' CHECK (status IN ('available', 'in_use')),
   last_used TIMESTAMP WITH TIME ZONE,
   usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
