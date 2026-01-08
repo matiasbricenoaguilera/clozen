@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle } from 'lucide-react'
+import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
 export default function AdminOrganizePage() {
