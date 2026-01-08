@@ -105,6 +105,22 @@ export default function AddGarmentPage() {
 
     setSaving(true)
 
+    // Logging detallado para diagnosticar demoras
+    console.time('🕐 Total Submit Time')
+    console.log('📝 Iniciando guardado de prenda:', {
+      hasImage: !!selectedImage,
+      imageSize: selectedImage ? `${(selectedImage.size / 1024 / 1024).toFixed(2)}MB` : 'N/A',
+      hasNfc: !!selectedNfcTag,
+      hasBarcode: !!barcodeCode.trim()
+    })
+
+    // Pre-validar datos
+    const validationStart = Date.now()
+    if (!userProfile?.id) {
+      throw new Error('Usuario no autenticado')
+    }
+    console.log(`✅ Validación completada en ${Date.now() - validationStart}ms`)
+
     // En modo demo, simular guardado
     if (!isSupabaseConfigured || !userProfile) {
       setTimeout(() => {
@@ -119,26 +135,61 @@ export default function AddGarmentPage() {
     try {
       let imageUrl = null
 
-      // Subir imagen si existe
+      // Subir imagen si existe (con compresión)
       if (selectedImage) {
-        const fileExt = selectedImage.name.split('.').pop()
+        console.time('🖼️ Image Processing Time')
+        console.log('📤 Iniciando procesamiento de imagen:', {
+          originalSize: `${(selectedImage.size / 1024 / 1024).toFixed(2)}MB`,
+          type: selectedImage.type,
+          name: selectedImage.name
+        })
+
+        // Comprimir imagen antes del upload
+        const compressedImage = await compressImage(selectedImage)
+        console.log('🗜️ Imagen comprimida:', {
+          newSize: `${(compressedImage.size / 1024 / 1024).toFixed(2)}MB`,
+          compressionRatio: `${((selectedImage.size - compressedImage.size) / selectedImage.size * 100).toFixed(1)}%`
+        })
+
+        console.timeEnd('🖼️ Image Processing Time')
+        console.time('📤 Image Upload Time')
+
+        const fileExt = 'jpg' // Siempre usar .jpg ya que convertimos a JPEG
         const fileName = `${Date.now()}-${Math.random()}.${fileExt}`
         const filePath = `garments/${userProfile.id}/${fileName}`
 
         const { error: uploadError } = await supabase.storage
           .from('garments')
-          .upload(filePath, selectedImage)
+          .upload(filePath, compressedImage)
 
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          console.error('❌ Error en upload:', uploadError)
+          throw uploadError
+        }
 
         const { data: { publicUrl } } = supabase.storage
           .from('garments')
           .getPublicUrl(filePath)
 
         imageUrl = publicUrl
+        console.timeEnd('📤 Image Upload Time')
+        console.log('✅ Imagen subida exitosamente:', publicUrl)
+      } else {
+        console.log('ℹ️ Sin imagen para subir')
       }
 
       // Crear prenda
+      console.time('👕 Garment Insert Time')
+      console.log('💾 Insertando prenda en BD:', {
+        userId: userProfile.id,
+        name: formData.name.trim(),
+        type: formData.type,
+        hasImage: !!imageUrl,
+        hasBox: !!formData.boxId,
+        hasNfc: !!selectedNfcTag,
+        hasBarcode: !!barcodeCode.trim()
+      })
+
       const { data: garmentData, error: insertError } = await supabase
         .from('garments')
         .insert({
@@ -156,11 +207,22 @@ export default function AddGarmentPage() {
         .select()
         .single()
 
-      if (insertError) throw insertError
+      if (insertError) {
+        console.error('❌ Error insertando prenda:', insertError)
+        throw insertError
+      }
+
+      console.timeEnd('👕 Garment Insert Time')
+      console.log('✅ Prenda creada exitosamente:', garmentData?.id)
 
       // Registrar el tag NFC en la tabla nfc_tags si existe
+      // Esta operación es independiente y no bloquea el éxito general
       if (selectedNfcTag && garmentData) {
-        const { error: nfcError } = await supabase
+        console.time('📱 NFC Registration Time')
+        console.log('🏷️ Registrando tag NFC:', selectedNfcTag)
+
+        // Ejecutar en background sin await para no bloquear
+        supabase
           .from('nfc_tags')
           .insert({
             tag_id: selectedNfcTag,
@@ -168,16 +230,39 @@ export default function AddGarmentPage() {
             entity_id: garmentData.id,
             created_by: userProfile.id
           })
-
-        if (nfcError) {
-          console.error('Error registrando tag NFC:', nfcError)
-          // No lanzamos error aquí para no bloquear el guardado de la prenda
-        }
+          .then(({ error: nfcError }) => {
+            console.timeEnd('📱 NFC Registration Time')
+            if (nfcError) {
+              console.error('❌ Error registrando tag NFC:', nfcError)
+            } else {
+              console.log('✅ Tag NFC registrado exitosamente')
+            }
+          })
       }
 
+      console.log('🔄 Redirigiendo al closet...')
+      console.timeEnd('🕐 Total Submit Time')
+      console.log('🔄 Redirigiendo al closet...')
+      console.timeEnd('🕐 Total Submit Time')
       router.push('/closet')
     } catch (error: any) {
-      setError(error.message || 'Error al guardar la prenda')
+      console.error('💥 Error en submit:', error)
+      console.timeEnd('🕐 Total Submit Time')
+
+      // Mejor manejo de errores para el usuario
+      let errorMessage = 'Error al guardar la prenda'
+
+      if (error.message?.includes('storage')) {
+        errorMessage = 'Error al subir la imagen. Verifica el tamaño y conexión.'
+      } else if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        errorMessage = 'Ya existe una prenda con ese código NFC o barras.'
+      } else if (error.message?.includes('network') || error.message?.includes('fetch')) {
+        errorMessage = 'Error de conexión. Verifica tu internet.'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      setError(errorMessage)
     } finally {
       setSaving(false)
     }
@@ -205,6 +290,55 @@ export default function AddGarmentPage() {
     setManualNfcCode('')
     setBarcodeCode('')
     setNfcMode(null)
+  }
+
+  // Función para comprimir imágenes antes del upload
+  const compressImage = async (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+
+      img.onload = () => {
+        // Calcular nuevas dimensiones (máximo 800px de ancho/alto)
+        let { width, height } = img
+        const maxDimension = 800
+
+        if (width > height) {
+          if (width > maxDimension) {
+            height = (height * maxDimension) / width
+            width = maxDimension
+          }
+        } else {
+          if (height > maxDimension) {
+            width = (width * maxDimension) / height
+            height = maxDimension
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        // Dibujar imagen redimensionada
+        ctx?.drawImage(img, 0, 0, width, height)
+
+        // Convertir a blob con compresión
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg', // Convertir siempre a JPEG para mejor compresión
+              lastModified: Date.now()
+            })
+            resolve(compressedFile)
+          } else {
+            resolve(file) // Si falla la compresión, devolver original
+          }
+        }, 'image/jpeg', 0.8) // Calidad 80%
+      }
+
+      img.onerror = () => resolve(file) // Si falla la carga, devolver original
+      img.src = URL.createObjectURL(file)
+    })
   }
 
   const handleBarcodeSubmit = async () => {
