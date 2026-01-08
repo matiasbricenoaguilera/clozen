@@ -50,6 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Corrección supabase.raw**: Reemplazar función inexistente con lógica de cliente en withdrawGarment
 - **Mejoras completas en Organizar**: Navbar sticky, modal de cajas, selector manual con recomendaciones, mover/quitar prendas
 - **Restricción de agregar prendas**: Solo administradores pueden agregar prendas, usuarios normales solo pueden ver y usar
+- **Actualización de prendas olvidadas**: Al retirar una prenda, desaparece automáticamente de la lista de recomendaciones
+- **Navbar reorganizado**: Admins siempre ven Mi Closet, Organizar y Cajas de forma clara
+- **Selector de usuario al agregar**: Admins pueden elegir de qué usuario es la prenda desde lista desplegable
 - **Formulario agregar prenda**: Integrado selector NFC con opciones de escanear tag existente o crear nuevo
 - **Vista del closet**: Agregados indicadores NFC y funcionalidad de escaneo de prendas
 - **Base de datos**: Integración completa con tabla `nfc_tags` para seguimiento de asociaciones
