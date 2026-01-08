@@ -85,16 +85,19 @@ export function EditGarmentModal({
 
   // Función para verificar si un código NFC está duplicado (excluyendo la prenda actual)
   const checkNfcDuplicate = async (nfcTag: string) => {
-    if (!nfcTag.trim() || !isSupabaseConfigured || !garment) {
+    if (!nfcTag || !nfcTag.trim() || !isSupabaseConfigured || !garment) {
       setNfcDuplicate({ exists: false })
       return
     }
+
+    // Normalizar el código antes de buscar
+    const normalizedTag = nfcTag.trim().toUpperCase()
 
     try {
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
-        .eq('nfc_tag_id', nfcTag.trim())
+        .eq('nfc_tag_id', normalizedTag)
         .neq('id', garment.id) // Excluir la prenda actual
         .single()
 
@@ -290,6 +293,16 @@ export function EditGarmentModal({
         return
       }
 
+      // Normalizar códigos NFC y de barras antes de guardar
+      const normalizedNfcTag = formData.nfc_tag_id?.trim().toUpperCase() || null
+      const normalizedBarcode = formData.barcode_id.trim() || null
+
+      console.log('📝 Códigos normalizados para edición:', {
+        nfc: normalizedNfcTag,
+        barcode: normalizedBarcode,
+        originalNfc: formData.nfc_tag_id
+      })
+
       // Actualizar prenda
       const updateData: any = {
         name: formData.name.trim(),
@@ -299,8 +312,8 @@ export function EditGarmentModal({
         style: formData.style.length > 0 ? formData.style : null,
         box_id: formData.box_id || null,
         image_url: imageUrl,
-        nfc_tag_id: formData.nfc_tag_id.trim() || null,
-        barcode_id: formData.barcode_id.trim() || null,
+        nfc_tag_id: normalizedNfcTag,
+        barcode_id: normalizedBarcode,
         updated_at: new Date().toISOString()
       }
 

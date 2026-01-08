@@ -165,16 +165,19 @@ export default function AddGarmentPage() {
 
   // Función para verificar si un código NFC está duplicado
   const checkNfcDuplicate = async (nfcTag: string) => {
-    if (!nfcTag.trim() || !isSupabaseConfigured) {
+    if (!nfcTag || !nfcTag.trim() || !isSupabaseConfigured) {
       setNfcDuplicate({ exists: false })
       return
     }
+
+    // Normalizar el código antes de buscar
+    const normalizedTag = nfcTag.trim().toUpperCase()
 
     try {
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
-        .eq('nfc_tag_id', nfcTag.trim())
+        .eq('nfc_tag_id', normalizedTag)
         .single()
 
       if (data && !error) {
@@ -243,15 +246,16 @@ export default function AddGarmentPage() {
     
     // Verificar código de barras si existe
     if (barcodeCode.trim()) {
+      const normalizedBarcode = barcodeCode.trim()
       checks.push(
         supabase
           .from('garments')
           .select('id, name, user_id')
-          .eq('barcode_id', barcodeCode.trim())
+          .eq('barcode_id', normalizedBarcode)
           .single()
           .then(({ data, error }: { data: any; error: any }) => {
             if (data && !error) {
-              return { type: 'barcode' as const, value: barcodeCode.trim(), existing: data }
+              return { type: 'barcode' as const, value: normalizedBarcode, existing: data }
             }
             return null
           })
@@ -259,17 +263,18 @@ export default function AddGarmentPage() {
       )
     }
     
-    // Verificar NFC tag si existe
-    if (selectedNfcTag) {
+    // Verificar NFC tag si existe (normalizado)
+    if (selectedNfcTag && selectedNfcTag.trim()) {
+      const normalizedNfc = selectedNfcTag.trim().toUpperCase()
       checks.push(
         supabase
           .from('garments')
           .select('id, name, user_id')
-          .eq('nfc_tag_id', selectedNfcTag)
+          .eq('nfc_tag_id', normalizedNfc)
           .single()
           .then(({ data, error }: { data: any; error: any }) => {
             if (data && !error) {
-              return { type: 'nfc' as const, value: selectedNfcTag, existing: data }
+              return { type: 'nfc' as const, value: normalizedNfc, existing: data }
             }
             return null
           })
@@ -410,6 +415,16 @@ export default function AddGarmentPage() {
         hasBarcode: !!barcodeCode.trim()
       })
 
+      // Normalizar código NFC antes de guardar (limpiar espacios y convertir a mayúsculas)
+      const normalizedNfcTag = selectedNfcTag?.trim().toUpperCase() || null
+      const normalizedBarcode = barcodeCode.trim() || null
+
+      console.log('📝 Códigos normalizados:', {
+        nfc: normalizedNfcTag,
+        barcode: normalizedBarcode,
+        originalNfc: selectedNfcTag
+      })
+
       const { data: garmentData, error: insertError } = await supabase
         .from('garments')
         .insert({
@@ -420,8 +435,8 @@ export default function AddGarmentPage() {
           style: formData.style,
           image_url: imageUrl,
           box_id: formData.boxId || null,
-          nfc_tag_id: selectedNfcTag || null,
-          barcode_id: barcodeCode.trim() || null,
+          nfc_tag_id: normalizedNfcTag,
+          barcode_id: normalizedBarcode,
           status: 'available'
         })
         .select()
@@ -446,15 +461,15 @@ export default function AddGarmentPage() {
 
       // Registrar el tag NFC en la tabla nfc_tags si existe
       // Esta operación es independiente y no bloquea el éxito general
-      if (selectedNfcTag && garmentData) {
+      if (normalizedNfcTag && garmentData) {
         console.time('📱 NFC Registration Time')
-        console.log('🏷️ Registrando tag NFC:', selectedNfcTag)
+        console.log('🏷️ Registrando tag NFC en tabla nfc_tags:', normalizedNfcTag)
 
         // Ejecutar en background sin await para no bloquear
         supabase
           .from('nfc_tags')
           .insert({
-            tag_id: selectedNfcTag,
+            tag_id: normalizedNfcTag,
             entity_type: 'garment',
             entity_id: garmentData.id,
             created_by: userProfile.id
@@ -462,10 +477,19 @@ export default function AddGarmentPage() {
           .then(({ error: nfcError }: { error: any }) => {
             console.timeEnd('📱 NFC Registration Time')
             if (nfcError) {
-              console.error('❌ Error registrando tag NFC:', nfcError)
+              console.error('❌ Error registrando tag NFC en tabla nfc_tags:', nfcError)
+              console.error('❌ Detalles del error NFC:', {
+                code: nfcError.code,
+                message: nfcError.message,
+                details: nfcError.details,
+                hint: nfcError.hint
+              })
             } else {
-              console.log('✅ Tag NFC registrado exitosamente')
+              console.log('✅ Tag NFC registrado exitosamente en tabla nfc_tags')
             }
+          })
+          .catch((error: unknown) => {
+            console.error('❌ Excepción al registrar tag NFC:', error)
           })
       }
 
@@ -522,10 +546,14 @@ export default function AddGarmentPage() {
   }
 
   const handleNFCRead = async (tagId: string) => {
-    setSelectedNfcTag(tagId)
+    // Normalizar el código NFC (limpiar espacios y convertir a mayúsculas)
+    const normalizedTagId = tagId.trim().toUpperCase()
+    console.log('📱 Código NFC leído:', { original: tagId, normalized: normalizedTagId })
+    
+    setSelectedNfcTag(normalizedTagId)
     setNfcMode(null) // Cerrar el scanner después de leer
     // Validar inmediatamente después de leer
-    await checkNfcDuplicate(tagId)
+    await checkNfcDuplicate(normalizedTagId)
   }
 
   const handleNFCError = (error: string) => {
