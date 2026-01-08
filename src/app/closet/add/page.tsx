@@ -143,21 +143,35 @@ export default function AddGarmentPage() {
     }
 
     try {
-      // Obtener cajas con conteo de prendas
-      const { data, error } = await supabase
-        .from('boxes')
-        .select(`
-          *,
-          garments(count)
-        `)
-        .order('name')
+      // OPTIMIZACIÓN: Obtener cajas y conteos en paralelo
+      const [boxesResult, garmentsResult] = await Promise.all([
+        supabase
+          .from('boxes')
+          .select('*')
+          .order('name'),
+        supabase
+          .from('garments')
+          .select('box_id')
+          .eq('status', 'available')
+          .not('box_id', 'is', null)
+      ])
 
-      if (error) throw error
+      if (boxesResult.error) throw boxesResult.error
 
-      // Transformar los datos para incluir el conteo
-      const boxesWithCount = (data || []).map((box: any) => ({
+      // Crear mapa de conteos desde la consulta optimizada
+      const countMap = new Map<string, number>()
+      if (garmentsResult.data) {
+        garmentsResult.data.forEach((item: any) => {
+          if (item.box_id) {
+            countMap.set(item.box_id, (countMap.get(item.box_id) || 0) + 1)
+          }
+        })
+      }
+
+      // Combinar datos con conteos
+      const boxesWithCount = (boxesResult.data || []).map((box: any) => ({
         ...box,
-        garment_count: box.garments?.[0]?.count ?? 0
+        garment_count: countMap.get(box.id) || 0
       }))
 
       setBoxes(boxesWithCount)
@@ -168,7 +182,7 @@ export default function AddGarmentPage() {
     }
   }
 
-  // Función para verificar si un código NFC está duplicado
+  // Función para verificar si un código NFC está duplicado (optimizada)
   const checkNfcDuplicate = async (nfcTag: string): Promise<{ exists: boolean; garmentName?: string }> => {
     if (!nfcTag || !nfcTag.trim() || !isSupabaseConfigured) {
       setNfcDuplicate({ exists: false })
@@ -179,11 +193,12 @@ export default function AddGarmentPage() {
     const normalizedTag = nfcTag.trim().toUpperCase()
 
     try {
+      // OPTIMIZACIÓN: Usar maybeSingle en lugar de single para mejor rendimiento
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
         .eq('nfc_tag_id', normalizedTag)
-        .single()
+        .maybeSingle()
 
       if (data && !error) {
         const result = { exists: true, garmentName: data.name }
@@ -200,7 +215,7 @@ export default function AddGarmentPage() {
     }
   }
 
-  // Función para verificar si un código de barras está duplicado
+  // Función para verificar si un código de barras está duplicado (optimizada)
   const checkBarcodeDuplicate = async (barcode: string) => {
     if (!barcode.trim() || !isSupabaseConfigured) {
       setBarcodeDuplicate({ exists: false })
@@ -208,11 +223,12 @@ export default function AddGarmentPage() {
     }
 
     try {
+      // OPTIMIZACIÓN: Usar maybeSingle en lugar de single para mejor rendimiento
       const { data, error } = await supabase
         .from('garments')
         .select('id, name')
         .eq('barcode_id', barcode.trim())
-        .single()
+        .maybeSingle()
 
       if (data && !error) {
         setBarcodeDuplicate({ exists: true, garmentName: data.name })
@@ -249,7 +265,7 @@ export default function AddGarmentPage() {
     }
   }, [barcodeCode])
 
-  // Función para verificar identificadores duplicados
+  // Función para verificar identificadores duplicados (optimizada)
   const checkDuplicateIdentifiers = async () => {
     const checks: Promise<{ type: 'barcode' | 'nfc'; value: string; existing: any } | null>[] = []
     
@@ -261,7 +277,7 @@ export default function AddGarmentPage() {
           .from('garments')
           .select('id, name, user_id')
           .eq('barcode_id', normalizedBarcode)
-          .single()
+          .maybeSingle() // OPTIMIZACIÓN: Usar maybeSingle en lugar de single
           .then(({ data, error }: { data: any; error: any }) => {
             if (data && !error) {
               return { type: 'barcode' as const, value: normalizedBarcode, existing: data }
@@ -280,7 +296,7 @@ export default function AddGarmentPage() {
           .from('garments')
           .select('id, name, user_id')
           .eq('nfc_tag_id', normalizedNfc)
-          .single()
+          .maybeSingle() // OPTIMIZACIÓN: Usar maybeSingle en lugar de single
           .then(({ data, error }: { data: any; error: any }) => {
             if (data && !error) {
               return { type: 'nfc' as const, value: normalizedNfc, existing: data }
@@ -787,11 +803,12 @@ export default function AddGarmentPage() {
       await new Promise(resolve => setTimeout(resolve, 100))
       
       // Verificar el estado actualizado
+      // OPTIMIZACIÓN: Usar maybeSingle en lugar de single para mejor rendimiento
       const { data } = await supabase
         .from('garments')
         .select('id, name')
         .eq('barcode_id', barcodeCode.trim())
-        .single()
+        .maybeSingle()
 
       if (data) {
         setError(`El código de barras "${barcodeCode.trim()}" ya está registrado en la prenda "${data.name}"`)
