@@ -50,7 +50,7 @@ export default function AdminOrganizePage() {
       if (boxesError) throw boxesError
 
       // Procesar datos de cajas
-      const processedBoxes = (boxesData || []).map(box => ({
+      const processedBoxes = (boxesData || []).map((box: any) => ({
         ...box,
         garment_count: box.garments?.[0]?.count || 0
       }))
