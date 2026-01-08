@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Error CSS @import en Netlify**: Ajustada configuración de Next.js para evitar warnings de @import en producción
+- **Error 401 Supabase en Netlify**: Agregado mejor manejo de variables de entorno y validación de credenciales
+- **Configuración Netlify**: Ajustado netlify.toml para correcta construcción del proyecto
+- **Debug de variables de entorno**: Agregado logging en desarrollo para verificar configuración de Supabase
+
+### Changed
+- **next.config.ts**: Simplificada configuración removiendo opciones que el plugin de Netlify maneja automáticamente
+- **lib/supabase.ts**: Mejorada validación de credenciales y agregado debug en desarrollo
+- **Documentación**: Creado SOLUCION_ERRORES_NETLIFY.md con guía completa para resolver errores comunes
+
+### Fixed
 - **NFC Writing Logic:** Corregido error crítico en `writeNFCTag` donde se intentaba escribir antes de detectar el tag NFC
 - **NFC Tag Registry:** Implementado registro centralizado de tags NFC en tabla `nfc_tags` al asignar tags a cajas
 - **NFC Duplicate Validation:** Agregada validación para prevenir asignación de tags NFC duplicados entre cajas y prendas
