@@ -1,10 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+
+// Debug en desarrollo para verificar variables de entorno
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔍 Supabase Config Check:', {
+    url: supabaseUrl ? '✅ Configurada' : '❌ No configurada',
+    key: supabaseAnonKey ? '✅ Configurada' : '❌ No configurada',
+    urlPreview: supabaseUrl ? `${supabaseUrl.substring(0, 30)}...` : 'N/A'
+  })
+}
 
 // Si no hay credenciales, crear un cliente dummy que no haga requests reales
-export const supabase = supabaseUrl && supabaseAnonKey
+export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http')
   ? createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         autoRefreshToken: true,
