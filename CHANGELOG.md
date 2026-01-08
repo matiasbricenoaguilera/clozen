@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Mejoras completas de responsividad**: La aplicación ahora es totalmente responsive en todos los dispositivos
+  - Menú hamburguesa móvil en Navbar con navegación adaptativa
+  - Grids adaptativos en todas las páginas (closet, recomendaciones, admin)
+  - Tablas responsive con vista móvil optimizada (Admin In-Use)
+  - Formularios adaptativos con mejor UX en pantallas pequeñas
+  - Botones y controles optimizados para touch en móviles
+  - Textos y espaciados adaptativos según tamaño de pantalla
+  - Mejora en la experiencia de usuario en dispositivos móviles y tablets
+
+### Added
 - **Sistema de selección múltiple con lista de búsqueda**: Flujo optimizado para buscar y retirar múltiples prendas
   - Panel flotante (GarmentSelectionCart) que muestra resumen de prendas seleccionadas
   - Panel lateral deslizable (GarmentSearchList) con vista detallada de cajas agrupadas
