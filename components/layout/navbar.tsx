@@ -8,10 +8,10 @@ import { Shirt, Sun, Moon, LogOut, Settings } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
-  const { userProfile, logout } = useAuth()
+  const { userProfile, signOut } = useAuth()
 
   const handleLogout = async () => {
-    await logout()
+    await signOut()
   }
 
   return (
