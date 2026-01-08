@@ -79,9 +79,9 @@ export default function AddGarmentPage() {
       if (error) throw error
 
       // Transformar los datos para incluir el conteo
-      const boxesWithCount = (data || []).map(box => ({
+      const boxesWithCount = (data || []).map((box: any) => ({
         ...box,
-        garment_count: box.garments?.[0]?.count || 0
+        garment_count: box.garments?.[0]?.count ?? 0
       }))
 
       setBoxes(boxesWithCount)
