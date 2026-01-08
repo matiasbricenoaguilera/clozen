@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
 export default function AdminOrganizePage() {
@@ -22,6 +24,13 @@ export default function AdminOrganizePage() {
   const [organizingGarment, setOrganizingGarment] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [selectedBox, setSelectedBox] = useState<Box | null>(null)
+  const [boxGarments, setBoxGarments] = useState<Garment[]>([])
+  const [loadingBoxGarments, setLoadingBoxGarments] = useState(false)
+  const [showBoxModal, setShowBoxModal] = useState(false)
+  const [showMoveModal, setShowMoveModal] = useState(false)
+  const [garmentToMove, setGarmentToMove] = useState<Garment | null>(null)
+  const [selectedBoxId, setSelectedBoxId] = useState<string>('')
 
   useEffect(() => {
     loadData()
@@ -102,27 +111,106 @@ export default function AdminOrganizePage() {
     }
   }
 
-  const assignToBestBox = async (garmentId: string) => {
+  // Función para obtener cajas recomendadas (< 60% = 9 prendas de 15)
+  const getRecommendedBoxes = () => {
+    return boxes
+      .filter(box => (box.garment_count || 0) < 9)
+      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+  }
+
+  // Función para cargar prendas de una caja
+  const loadBoxGarments = async (boxId: string) => {
+    setLoadingBoxGarments(true)
+    try {
+      const { data, error } = await supabase
+        .from('garments')
+        .select(`
+          *,
+          users:user_id (
+            id,
+            email,
+            full_name
+          )
+        `)
+        .eq('box_id', boxId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setBoxGarments(data || [])
+    } catch (error) {
+      console.error('Error loading box garments:', error)
+      setError('Error al cargar prendas de la caja')
+    } finally {
+      setLoadingBoxGarments(false)
+    }
+  }
+
+  // Función para abrir modal de caja
+  const handleBoxClick = async (box: Box) => {
+    setSelectedBox(box)
+    setShowBoxModal(true)
+    await loadBoxGarments(box.id)
+  }
+
+  // Función para mover prenda entre cajas
+  const moveGarment = async (garmentId: string, targetBoxId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('garments')
+        .update({
+          box_id: targetBoxId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', garmentId)
+
+      if (error) throw error
+
+      setSuccess(`✅ Prenda ${targetBoxId ? 'movida' : 'removida'} exitosamente`)
+      
+      // Recargar datos
+      if (selectedBox) {
+        await loadBoxGarments(selectedBox.id)
+      }
+      await loadData()
+      
+      setShowMoveModal(false)
+      setGarmentToMove(null)
+    } catch (error) {
+      console.error('Error moving garment:', error)
+      setError('Error al mover la prenda')
+    }
+  }
+
+  // Función para quitar prenda de caja
+  const removeFromBox = async (garmentId: string) => {
+    await moveGarment(garmentId, null)
+  }
+
+  // Función mejorada para asignar prenda a caja (con selector manual)
+  const assignToBox = async (garmentId: string, boxId?: string) => {
     setOrganizingGarment(true)
     setError('')
     setSuccess('')
 
     try {
-      // Encontrar la caja con menos prendas
-      const bestBox = boxes.reduce((prev, current) =>
-        (prev.garment_count || 0) <= (current.garment_count || 0) ? prev : current
-      )
+      const targetBoxId = boxId || selectedBoxId
 
-      if (!bestBox) {
-        setError('No hay cajas disponibles')
+      if (!targetBoxId) {
+        setError('Debes seleccionar una caja')
         return
       }
 
-      // Actualizar la prenda con la nueva caja y marcar como available
+      // Verificar capacidad de la caja
+      const targetBox = boxes.find(b => b.id === targetBoxId)
+      if (targetBox && (targetBox.garment_count || 0) >= 15) {
+        setError('Esta caja está llena (máximo 15 prendas)')
+        return
+      }
+
       const { error: updateError } = await supabase
         .from('garments')
         .update({
-          box_id: bestBox.id,
+          box_id: targetBoxId,
           status: 'available',
           updated_at: new Date().toISOString()
         })
@@ -130,20 +218,13 @@ export default function AdminOrganizePage() {
 
       if (updateError) throw updateError
 
-      // Registrar en historial de organización
-      await supabase
-        .from('usage_history')
-        .insert({
-          garment_id: garmentId,
-          usage_type: 'organized',
-          created_at: new Date().toISOString()
-        })
-
-      setSuccess(`✅ Prenda organizada en "${bestBox.name}" (${(bestBox.garment_count ?? 0) + 1} prendas ahora)`)
+      const boxName = targetBox?.name || 'caja'
+      setSuccess(`✅ Prenda organizada en "${boxName}"`)
 
       // Limpiar y recargar
       setFoundGarment(null)
       setScanInput('')
+      setSelectedBoxId('')
       await loadData()
 
     } catch (error) {
@@ -196,22 +277,40 @@ export default function AdminOrganizePage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {boxes.map(box => (
-              <div key={box.id} className="p-4 border rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold">{box.name}</h3>
-                  <Badge variant="secondary">
-                    {box.garment_count || 0} prendas
-                  </Badge>
+            {boxes.map(box => {
+              const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+              return (
+                <div 
+                  key={box.id} 
+                  className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => handleBoxClick(box)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">{box.name}</h3>
+                    <Badge variant={occupancyPercent >= 100 ? "destructive" : occupancyPercent >= 60 ? "default" : "secondary"}>
+                      {box.garment_count || 0}/15
+                    </Badge>
+                  </div>
+                  <div className="w-full bg-muted rounded-full h-2 mb-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all ${
+                        occupancyPercent >= 100 ? 'bg-red-500' : 
+                        occupancyPercent >= 60 ? 'bg-yellow-500' : 
+                        'bg-green-500'
+                      }`}
+                      style={{ width: `${Math.min(occupancyPercent, 100)}%` }}
+                    />
+                  </div>
+                  {box.location && (
+                    <p className="text-sm text-muted-foreground">{box.location}</p>
+                  )}
+                  {box.description && (
+                    <p className="text-sm text-muted-foreground mt-1">{box.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-2">Click para ver prendas</p>
                 </div>
-                {box.location && (
-                  <p className="text-sm text-muted-foreground">{box.location}</p>
-                )}
-                {box.description && (
-                  <p className="text-sm text-muted-foreground mt-1">{box.description}</p>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
         </CardContent>
       </Card>
@@ -298,25 +397,220 @@ export default function AdminOrganizePage() {
               </div>
             </div>
 
-            <Button
-              onClick={() => assignToBestBox(foundGarment.id)}
-              disabled={organizingGarment}
-              className="w-full"
-            >
-              {organizingGarment ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Organizando...
-                </>
-              ) : (
-                <>
-                  <Package className="h-4 w-4 mr-2" />
-                  Asignar a Caja Óptima
-                </>
-              )}
-            </Button>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Seleccionar Caja
+                </label>
+                
+                {/* Cajas Recomendadas */}
+                {getRecommendedBoxes().length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs text-muted-foreground mb-2">
+                      💡 Recomendadas (menos del 60% ocupadas):
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {getRecommendedBoxes().slice(0, 4).map(box => {
+                        const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+                        return (
+                          <Button
+                            key={box.id}
+                            variant={selectedBoxId === box.id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSelectedBoxId(box.id)}
+                            className="justify-start"
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span>{box.name}</span>
+                              <Badge variant="secondary" className="ml-2">
+                                {box.garment_count || 0}/15 ({occupancyPercent}%)
+                              </Badge>
+                            </div>
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selector de todas las cajas */}
+                <Select value={selectedBoxId} onValueChange={setSelectedBoxId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una caja" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boxes.map(box => {
+                      const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+                      const isFull = (box.garment_count || 0) >= 15
+                      return (
+                        <SelectItem
+                          key={box.id}
+                          value={box.id}
+                          disabled={isFull}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span>{box.name}</span>
+                            <Badge variant="secondary" className="ml-2">
+                              {box.garment_count || 0}/15
+                              {isFull && ' (Llena)'}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={() => assignToBox(foundGarment.id)}
+                disabled={organizingGarment || !selectedBoxId}
+                className="w-full"
+              >
+                {organizingGarment ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Organizando...
+                  </>
+                ) : (
+                  <>
+                    <Package className="h-4 w-4 mr-2" />
+                    Guardar en Caja Seleccionada
+                  </>
+                )}
+              </Button>
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Modal de Prendas en Caja */}
+      {showBoxModal && selectedBox && (
+        <Dialog open={showBoxModal} onOpenChange={setShowBoxModal}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>📦 Prendas en {selectedBox.name}</DialogTitle>
+              <DialogDescription>
+                {selectedBox.garment_count || 0} de 15 prendas ({Math.round(((selectedBox.garment_count || 0) / 15) * 100)}% ocupado)
+              </DialogDescription>
+            </DialogHeader>
+
+            {loadingBoxGarments ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : boxGarments.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">Esta caja está vacía</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {boxGarments.map((garment: any) => (
+                  <Card key={garment.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
+                          {garment.image_url ? (
+                            <img
+                              src={garment.image_url}
+                              alt={garment.name}
+                              className="w-full h-full object-cover rounded-lg"
+                            />
+                          ) : (
+                            <Shirt className="h-8 w-8 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold truncate">{garment.name}</h4>
+                          <p className="text-sm text-muted-foreground">{garment.type}</p>
+                          {garment.users && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              👤 {garment.users.full_name || garment.users.email}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setGarmentToMove(garment)
+                              setShowMoveModal(true)
+                            }}
+                          >
+                            Mover
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => removeFromBox(garment.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal para Mover Prenda */}
+      {showMoveModal && garmentToMove && (
+        <Dialog open={showMoveModal} onOpenChange={setShowMoveModal}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Mover Prenda</DialogTitle>
+              <DialogDescription>
+                Selecciona la caja destino para "{garmentToMove.name}"
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Cajas Disponibles</label>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {boxes
+                    .filter(b => b.id !== selectedBox?.id)
+                    .map(box => {
+                      const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+                      const isFull = (box.garment_count || 0) >= 15
+                      return (
+                        <Button
+                          key={box.id}
+                          variant="outline"
+                          className="w-full justify-start"
+                          onClick={() => {
+                            moveGarment(garmentToMove.id, box.id)
+                          }}
+                          disabled={isFull}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span>{box.name}</span>
+                            <Badge variant={isFull ? "destructive" : "secondary"}>
+                              {box.garment_count || 0}/15 {isFull && '(Llena)'}
+                            </Badge>
+                          </div>
+                        </Button>
+                      )
+                    })}
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  moveGarment(garmentToMove.id, null)
+                }}
+                className="w-full"
+              >
+                <X className="h-4 w-4 mr-2" />
+                Quitar de Caja (Sin asignar)
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )
