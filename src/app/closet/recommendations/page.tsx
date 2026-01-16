@@ -1,19 +1,27 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { WeatherCard } from '@/components/weather/weather-card'
-import { GarmentLocationModal } from '@/components/garments/garment-location-modal'
 import { recommendOutfits } from '@/utils/outfit-recommendations'
 import { getWeatherByCity } from '@/utils/weather'
 import { WeatherData, Garment, Box } from '@/types'
 import { Shirt, Sparkles, Cloud, Package, Hand, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+
+// Lazy load componentes pesados
+const WeatherCard = dynamic(() => import('@/components/weather/weather-card').then(mod => ({ default: mod.WeatherCard })), {
+  ssr: false
+})
+
+const GarmentLocationModal = dynamic(() => import('@/components/garments/garment-location-modal').then(mod => ({ default: mod.GarmentLocationModal })), {
+  ssr: false
+})
 
 export default function RecommendationsPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -27,15 +35,8 @@ export default function RecommendationsPage() {
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [selectedOutfit, setSelectedOutfit] = useState<Garment[] | null>(null)
 
-  useEffect(() => {
-    if (!authLoading && userProfile) {
-      loadData()
-    } else if (!authLoading && !userProfile) {
-      router.push('/auth/login')
-    }
-  }, [userProfile, authLoading])
-
-  const loadData = async () => {
+  // Memoizar loadData para evitar recrear la función
+  const loadData = useCallback(async () => {
     if (!isSupabaseConfigured || !userProfile) return
 
     setLoading(true)
@@ -83,28 +84,19 @@ export default function RecommendationsPage() {
       if (boxesError) throw boxesError
       setBoxes(boxesData || [])
 
-      // Cargar clima si hay ciudad configurada
+      // Cargar clima si hay ciudad configurada (de forma no bloqueante)
       if (userProfile.city) {
-        const weatherData = await getWeatherByCity(userProfile.city)
-        setWeather(weatherData)
+        getWeatherByCity(userProfile.city).then(setWeather).catch(console.error)
       }
     } catch (error) {
       console.error('Error loading data:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [isSupabaseConfigured, userProfile])
 
-  useEffect(() => {
-    if (garments.length > 0 && weather) {
-      generateRecommendations()
-    } else if (garments.length > 0 && !weather && userProfile?.city) {
-      // Intentar obtener clima si aún no se tiene
-      getWeatherByCity(userProfile.city).then(setWeather)
-    }
-  }, [garments, weather, userProfile])
-
-  const generateRecommendations = () => {
+  // Memoizar generateRecommendations
+  const generateRecommendations = useCallback(() => {
     setLoadingRecommendations(true)
     try {
       const recs = recommendOutfits(garments, weather, userProfile?.id)
@@ -114,7 +106,33 @@ export default function RecommendationsPage() {
     } finally {
       setLoadingRecommendations(false)
     }
-  }
+  }, [garments, weather, userProfile])
+
+  useEffect(() => {
+    if (garments.length > 0 && weather) {
+      generateRecommendations()
+    } else if (garments.length > 0 && !weather && userProfile?.city) {
+      // Intentar obtener clima si aún no se tiene (no bloqueante)
+      getWeatherByCity(userProfile.city).then(setWeather).catch(console.error)
+    }
+  }, [garments, weather, userProfile, generateRecommendations])
+
+  useEffect(() => {
+    if (!authLoading && userProfile) {
+      loadData()
+    } else if (!authLoading && !userProfile) {
+      router.push('/auth/login')
+    }
+  }, [userProfile, authLoading, loadData, router])
+
+  useEffect(() => {
+    if (garments.length > 0 && weather) {
+      generateRecommendations()
+    } else if (garments.length > 0 && !weather && userProfile?.city) {
+      // Intentar obtener clima si aún no se tiene (no bloqueante)
+      getWeatherByCity(userProfile.city).then(setWeather).catch(console.error)
+    }
+  }, [garments, weather, userProfile, generateRecommendations])
 
   const handleWeatherUpdate = (newWeather: WeatherData | null) => {
     setWeather(newWeather)
