@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -601,9 +602,11 @@ export function EditGarmentModal({
             />
             {imagePreview && !selectedImage && (
               <div className="mt-2">
-                <img
+                <Image
                   src={imagePreview}
                   alt="Preview"
+                  width={128}
+                  height={128}
                   className="w-32 h-32 object-cover rounded-lg"
                 />
               </div>

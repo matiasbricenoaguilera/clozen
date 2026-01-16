@@ -5,5 +5,16 @@
 [build.environment]
   NODE_VERSION = "20.9.0"
 
+# Headers de caché para assets estáticos
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/_next/image"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"

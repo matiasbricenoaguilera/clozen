@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -113,16 +114,11 @@ export default function ClosetPage() {
           usage_count, 
           last_used, 
           created_at,
-          user_id,
-          users:user_id (
-            id,
-            email,
-            full_name
-          )
+          user_id
         `)
         .eq('status', 'available') // Solo mostrar prendas disponibles
         .order('last_used', { ascending: true, nullsFirst: false }) // Priorizar prendas menos usadas
-        .limit(200) // Aumentar límite para admins
+        .limit(50) // Límite optimizado para mejor rendimiento
 
       // Si no es admin, filtrar por su user_id
       if (!isAdmin) {
@@ -978,9 +974,11 @@ export default function ClosetPage() {
                     <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-2 sm:p-3 border shadow-sm">
                       <div className="h-20 sm:h-24 bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
                         {garment.image_url ? (
-                          <img
+                          <Image
                             src={garment.image_url}
                             alt={garment.name}
+                            width={96}
+                            height={96}
                             className="w-full h-full object-cover rounded"
                             loading="lazy"
                           />
@@ -1091,23 +1089,19 @@ export default function ClosetPage() {
               }}
             >
               <CardHeader className="pb-3">
-                <div className="h-32 bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                <div className="h-32 bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
                   {garment.image_url ? (
-                    <img
+                    <Image
                       src={garment.image_url}
                       alt={garment.name}
+                      width={128}
+                      height={128}
                       className="w-full h-full object-cover rounded-lg"
                       loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        // Fallback si la imagen falla
-                        e.currentTarget.style.display = 'none'
-                        e.currentTarget.nextElementSibling?.classList.remove('hidden')
-                      }}
                     />
-                  ) : null}
-                  {/* Fallback icon - visible cuando no hay imagen o falla la carga */}
-                  <Shirt className={`h-8 w-8 text-muted-foreground ${garment.image_url ? 'hidden' : ''}`} />
+                  ) : (
+                    <Shirt className="h-8 w-8 text-muted-foreground" />
+                  )}
                 </div>
                 <CardTitle className="text-lg line-clamp-1">{garment.name}</CardTitle>
                 <CardDescription className="space-y-1">
@@ -1338,9 +1332,11 @@ export default function ClosetPage() {
                             <div className="flex items-center gap-3">
                               <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
                                 {garment.image_url ? (
-                                  <img
+                                  <Image
                                     src={garment.image_url}
                                     alt={garment.name}
+                                    width={64}
+                                    height={64}
                                     className="w-full h-full object-cover"
                                   />
                                 ) : (
@@ -1592,9 +1588,11 @@ export default function ClosetPage() {
               <div className="flex gap-4">
                 <div className="aspect-square w-24 bg-muted rounded-lg flex items-center justify-center">
                   {foundGarment.image_url ? (
-                    <img
+                    <Image
                       src={foundGarment.image_url}
                       alt={foundGarment.name}
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover rounded-lg"
                     />
                   ) : (

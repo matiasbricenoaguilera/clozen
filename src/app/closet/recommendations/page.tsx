@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -45,15 +46,24 @@ export default function RecommendationsPage() {
       let query = supabase
         .from('garments')
         .select(`
-          *,
-          users:user_id (
-            id,
-            email,
-            full_name
-          )
+          id,
+          name,
+          type,
+          color,
+          season,
+          style,
+          image_url,
+          box_id,
+          nfc_tag_id,
+          barcode_id,
+          status,
+          usage_count,
+          last_used,
+          created_at,
+          user_id
         `)
         .eq('status', 'available')
-        .limit(200)
+        .limit(50)
 
       if (!isAdmin) {
         query = query.eq('user_id', userProfile.id)
@@ -293,9 +303,11 @@ export default function RecommendationsPage() {
                         >
                           <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
                             {garment.image_url ? (
-                              <img
+                              <Image
                                 src={garment.image_url}
                                 alt={garment.name}
+                                width={200}
+                                height={200}
                                 className="w-full h-full object-cover rounded-lg"
                                 loading="lazy"
                               />
