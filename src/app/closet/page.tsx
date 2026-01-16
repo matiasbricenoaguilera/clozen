@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo, startTransition } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
@@ -12,15 +13,35 @@ import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { NFCScanner } from '@/components/nfc/nfc-scanner'
 import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
-import { WeatherCard } from '@/components/weather/weather-card'
-import { GarmentLocationModal } from '@/components/garments/garment-location-modal'
-import { GarmentSelectionCart } from '@/components/garments/garment-selection-cart'
-import { GarmentSearchList } from '@/components/garments/garment-search-list'
-import { EditGarmentModal } from '@/components/garments/edit-garment-modal'
 import type { Garment, Box, WeatherData } from '@/types'
+
+// Lazy load componentes pesados que no se usan en el render inicial
+const NFCScanner = dynamic(() => import('@/components/nfc/nfc-scanner').then(mod => ({ default: mod.NFCScanner })), {
+  ssr: false,
+  loading: () => <div className="p-4 text-center text-muted-foreground">Cargando escáner NFC...</div>
+})
+
+const WeatherCard = dynamic(() => import('@/components/weather/weather-card').then(mod => ({ default: mod.WeatherCard })), {
+  ssr: false
+})
+
+const GarmentLocationModal = dynamic(() => import('@/components/garments/garment-location-modal').then(mod => ({ default: mod.GarmentLocationModal })), {
+  ssr: false
+})
+
+const GarmentSelectionCart = dynamic(() => import('@/components/garments/garment-selection-cart').then(mod => ({ default: mod.GarmentSelectionCart })), {
+  ssr: false
+})
+
+const GarmentSearchList = dynamic(() => import('@/components/garments/garment-search-list').then(mod => ({ default: mod.GarmentSearchList })), {
+  ssr: false
+})
+
+const EditGarmentModal = dynamic(() => import('@/components/garments/edit-garment-modal').then(mod => ({ default: mod.EditGarmentModal })), {
+  ssr: false
+})
 
 export default function ClosetPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -56,33 +77,8 @@ export default function ClosetPage() {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastChangeTimeRef = useRef<number>(0)
 
-  useEffect(() => {
-    // En modo demo (sin Supabase), mostrar interfaz vacía inmediatamente
-    if (!isSupabaseConfigured) {
-      setGarments([])
-      setBoxes([])
-      setBoxesMap(new Map())
-      setLoading(false)
-      return
-    }
-
-    // En modo real, esperar a que la autenticación se resuelva
-    if (!authLoading && userProfile) {
-      // Ejecutar consultas en paralelo para mejor rendimiento
-      Promise.all([fetchGarments(), fetchBoxes(), fetchForgottenGarments()]).finally(() => {
-        setLoading(false)
-      })
-    } else if (!authLoading && !userProfile) {
-      // Usuario no autenticado en modo real
-      setGarments([])
-      setBoxes([])
-      setBoxesMap(new Map())
-      setForgottenGarments([])
-      setLoading(false)
-    }
-  }, [userProfile, authLoading, isSupabaseConfigured])
-
-  const fetchGarments = async () => {
+  // Memoizar fetchGarments para evitar recrear la función
+  const fetchGarments = useCallback(async () => {
     setLoadingGarments(true)
 
     // En modo demo, devolver array vacío
@@ -128,7 +124,10 @@ export default function ClosetPage() {
       const { data, error } = await query
 
       if (error) throw error
-      setGarments(data || [])
+      // Usar startTransition para actualizaciones no urgentes
+      startTransition(() => {
+        setGarments(data || [])
+      })
     } catch (error) {
       console.error('Error fetching garments:', error)
       // En caso de error, mostrar array vacío
@@ -136,9 +135,10 @@ export default function ClosetPage() {
     } finally {
       setLoadingGarments(false)
     }
-  }
+  }, [isSupabaseConfigured, userProfile])
 
-  const fetchBoxes = async () => {
+  // Memoizar fetchBoxes para evitar recrear la función
+  const fetchBoxes = useCallback(async () => {
     setLoadingBoxes(true)
 
     // En modo demo, devolver array vacío
@@ -181,14 +181,18 @@ export default function ClosetPage() {
       }))
 
       const boxesData: Box[] = boxesWithCount
-      setBoxes(boxesData)
-
+      
       // Crear mapa para acceso O(1) a nombres de cajas
       const boxesMapData = new Map<string, string>()
       boxesData.forEach((box: Box) => {
         boxesMapData.set(box.id, box.name)
       })
-      setBoxesMap(boxesMapData)
+      
+      // Usar startTransition para actualizaciones no urgentes
+      startTransition(() => {
+        setBoxes(boxesData)
+        setBoxesMap(boxesMapData)
+      })
     } catch (error) {
       console.error('Error fetching boxes:', error)
       // En caso de error, mostrar array vacío
@@ -197,29 +201,47 @@ export default function ClosetPage() {
     } finally {
       setLoadingBoxes(false)
     }
-  }
+  }, [isSupabaseConfigured])
 
-  const filteredGarments = garments.filter(garment => {
-    const matchesSearch = garment.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         garment.type.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesBox = !selectedBox || garment.box_id === selectedBox
-    return matchesSearch && matchesBox
-  })
+  // Memoizar filteredGarments para evitar recálculos innecesarios
+  const filteredGarments = useMemo(() => {
+    if (!garments.length) return []
+    const lowerSearchTerm = searchTerm.toLowerCase()
+    return garments.filter(garment => {
+      const matchesSearch = !lowerSearchTerm || 
+        garment.name.toLowerCase().includes(lowerSearchTerm) ||
+        garment.type.toLowerCase().includes(lowerSearchTerm)
+      const matchesBox = !selectedBox || garment.box_id === selectedBox
+      return matchesSearch && matchesBox
+    })
+  }, [garments, searchTerm, selectedBox])
 
-  const getBoxName = (boxId: string | null) => {
+  // Memoizar getBoxName para evitar recrear la función en cada render
+  const getBoxName = useCallback((boxId: string | null) => {
     if (!boxId) return 'Sin caja'
     return boxesMap.get(boxId) || 'Caja desconocida'
-  }
+  }, [boxesMap])
 
-  // Función para recargar datos (útil para refresh)
-  const refreshData = async () => {
+  // Memoizar mapa de ubicaciones de cajas para acceso rápido
+  const boxesLocationMap = useMemo(() => {
+    const map = new Map<string, string>()
+    boxes.forEach(box => {
+      if (box.location) {
+        map.set(box.id, box.location)
+      }
+    })
+    return map
+  }, [boxes])
+
+  // Memoizar refreshData para evitar recrear la función
+  const refreshData = useCallback(async () => {
     setLoading(true)
     await Promise.all([fetchGarments(), fetchBoxes()])
     setLoading(false)
-  }
+  }, [fetchGarments, fetchBoxes])
 
-  // Función para obtener prendas olvidadas (recomendaciones inteligentes)
-  const fetchForgottenGarments = async () => {
+  // Memoizar fetchForgottenGarments para evitar recrear la función
+  const fetchForgottenGarments = useCallback(async () => {
     if (!userProfile) return
 
     try {
@@ -243,25 +265,29 @@ export default function ClosetPage() {
       const { data, error } = await query
 
       if (error) throw error
-      setForgottenGarments(data || [])
+      // Usar startTransition para actualizaciones no urgentes
+      startTransition(() => {
+        setForgottenGarments(data || [])
+      })
     } catch (error) {
       console.error('Error fetching forgotten garments:', error)
       setForgottenGarments([])
     }
-  }
+  }, [userProfile])
 
   // Función para agregar prenda a la lista de búsqueda
-  const handleAddToSearchList = (garmentId: string) => {
+  // Memoizar handleAddToSearchList
+  const handleAddToSearchList = useCallback((garmentId: string) => {
     const garment = garments.find(g => g.id === garmentId)
     if (garment && !selectedGarments.find(g => g.id === garmentId)) {
       setSelectedGarments(prev => [...prev, garment])
     }
-  }
+  }, [garments, selectedGarments])
 
-  // Función para quitar prenda de la lista de búsqueda
-  const handleRemoveFromSearchList = (garmentId: string) => {
+  // Memoizar handleRemoveFromSearchList
+  const handleRemoveFromSearchList = useCallback((garmentId: string) => {
     setSelectedGarments(prev => prev.filter(g => g.id !== garmentId))
-  }
+  }, [])
 
   // Función para confirmar retiro de múltiples prendas
   const handleConfirmMultipleWithdraw = async (garmentIds: string[]) => {
@@ -753,7 +779,7 @@ export default function ClosetPage() {
 
       const targetBox = boxes.find(b => b.id === targetBoxId)
       const boxName = targetBox?.name || 'caja seleccionada'
-      const boxLocation = (targetBox as any)?.location
+      const boxLocation = targetBox?.location
 
       console.log(`✅ ${foundGarmentsBatch.length} prendas actualizadas (${inUseGarments.length} restauradas de "en uso") en "${boxName}"`)
 
@@ -1113,9 +1139,9 @@ export default function ClosetPage() {
                         Sin caja
                       </Badge>
                     )}
-                    {garment.box_id && boxes.find(b => b.id === garment.box_id)?.location && (
+                    {garment.box_id && boxesLocationMap.get(garment.box_id) && (
                       <span className="text-xs text-muted-foreground ml-2">
-                        ({boxes.find(b => b.id === garment.box_id)?.location})
+                        ({boxesLocationMap.get(garment.box_id)})
                       </span>
                     )}
                   </div>
