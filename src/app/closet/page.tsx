@@ -256,23 +256,8 @@ export default function ClosetPage() {
     setLoading(false)
   }, [fetchGarments, fetchBoxes])
 
-  // Cargar datos iniciales cuando el componente se monta o cuando cambia el usuario
-  useEffect(() => {
-    if (authLoading) {
-      return // Esperar a que la autenticación termine
-    }
-
-    if (!userProfile) {
-      setLoading(false)
-      return
-    }
-
-    // Cargar datos iniciales
-    refreshData()
-    fetchForgottenGarments()
-  }, [userProfile, authLoading, refreshData, fetchForgottenGarments])
-
   // Memoizar fetchForgottenGarments para evitar recrear la función
+  // DEBE estar antes del useEffect que lo usa
   const fetchForgottenGarments = useCallback(async () => {
     if (!userProfile) return
 
@@ -306,6 +291,23 @@ export default function ClosetPage() {
       setForgottenGarments([])
     }
   }, [userProfile])
+
+  // Cargar datos iniciales cuando el componente se monta o cuando cambia el usuario
+  // DEBE estar después de todas las funciones que usa (fetchForgottenGarments, refreshData)
+  useEffect(() => {
+    if (authLoading) {
+      return // Esperar a que la autenticación termine
+    }
+
+    if (!userProfile) {
+      setLoading(false)
+      return
+    }
+
+    // Cargar datos iniciales
+    refreshData()
+    fetchForgottenGarments()
+  }, [userProfile, authLoading, refreshData, fetchForgottenGarments])
 
   // Función para agregar prenda a la lista de búsqueda
   // Memoizar handleAddToSearchList
