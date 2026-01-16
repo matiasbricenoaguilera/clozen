@@ -174,7 +174,7 @@ export default function ClosetPage() {
 
       // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
       // Esto es MUCHO más eficiente que traer todos los registros
-      const countQueries = boxIds.map(boxId =>
+      const countQueries = boxIds.map((boxId: string) =>
         supabase
           .from('garments')
           .select('*', { count: 'exact', head: true })
