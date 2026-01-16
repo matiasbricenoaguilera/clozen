@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -454,9 +455,11 @@ export default function AdminOrganizePage() {
             <div className="flex items-center gap-4 mb-4">
               <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
                 {foundGarment.image_url ? (
-                  <img
+                  <Image
                     src={foundGarment.image_url}
                     alt={foundGarment.name}
+                    width={64}
+                    height={64}
                     className="w-full h-full object-cover rounded-lg"
                   />
                 ) : (
@@ -588,9 +591,11 @@ export default function AdminOrganizePage() {
                       <div className="flex items-center gap-4">
                         <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center flex-shrink-0">
                           {garment.image_url ? (
-                            <img
+                            <Image
                               src={garment.image_url}
                               alt={garment.name}
+                              width={64}
+                              height={64}
                               className="w-full h-full object-cover rounded-lg"
                             />
                           ) : (
