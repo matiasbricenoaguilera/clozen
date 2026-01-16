@@ -150,6 +150,7 @@ export default function ClosetPage() {
     }
 
     try {
+      // Obtener todas las cajas
       const { data, error } = await supabase
         .from('boxes')
         .select('id, name')
@@ -157,22 +158,37 @@ export default function ClosetPage() {
 
       if (error) throw error
 
-      // OPTIMIZACIÓN: Obtener todos los conteos en una sola consulta
-      const { data: garmentsData } = await supabase
-        .from('garments')
-        .select('box_id')
-        .eq('status', 'available')
-        .not('box_id', 'is', null)
+      // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
+      // en lugar de traer TODOS los box_id (puede ser miles de registros)
+      const boxIds = (data || []).map(box => box.id)
+      
+      // Si no hay cajas, retornar vacío
+      if (boxIds.length === 0) {
+        startTransition(() => {
+          setBoxes([])
+          setBoxesMap(new Map())
+        })
+        setLoadingBoxes(false)
+        return
+      }
+
+      // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
+      // Esto es MUCHO más eficiente que traer todos los registros
+      const countQueries = boxIds.map(boxId =>
+        supabase
+          .from('garments')
+          .select('*', { count: 'exact', head: true })
+          .eq('box_id', boxId)
+          .eq('status', 'available')
+      )
+
+      const countResults = await Promise.all(countQueries)
 
       // Crear mapa de conteos
       const countMap = new Map<string, number>()
-      if (garmentsData) {
-        garmentsData.forEach((item: any) => {
-          if (item.box_id) {
-            countMap.set(item.box_id, (countMap.get(item.box_id) || 0) + 1)
-          }
-        })
-      }
+      boxIds.forEach((boxId, index) => {
+        countMap.set(boxId, countResults[index].count || 0)
+      })
 
       // Combinar datos con conteos
       const boxesWithCount = (data || []).map((box: any) => ({
@@ -239,6 +255,22 @@ export default function ClosetPage() {
     await Promise.all([fetchGarments(), fetchBoxes()])
     setLoading(false)
   }, [fetchGarments, fetchBoxes])
+
+  // Cargar datos iniciales cuando el componente se monta o cuando cambia el usuario
+  useEffect(() => {
+    if (authLoading) {
+      return // Esperar a que la autenticación termine
+    }
+
+    if (!userProfile) {
+      setLoading(false)
+      return
+    }
+
+    // Cargar datos iniciales
+    refreshData()
+    fetchForgottenGarments()
+  }, [userProfile, authLoading, refreshData, fetchForgottenGarments])
 
   // Memoizar fetchForgottenGarments para evitar recrear la función
   const fetchForgottenGarments = useCallback(async () => {
