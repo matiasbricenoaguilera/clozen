@@ -264,6 +264,10 @@ export function EditGarmentModal({
     }
   }
 
+  const handleFileSelect = (file: File) => {
+    handleImageSelect(file)
+  }
+
   const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve) => {
       const reader = new FileReader()
@@ -590,7 +594,7 @@ export function EditGarmentModal({
           <div>
             <Label>Imagen</Label>
             <FileUpload
-              onFileSelect={(file) => handleImageSelect(file)}
+              onFileSelect={handleFileSelect}
               onFileRemove={() => handleImageSelect(null)}
               selectedFile={selectedImage}
               accept="image/*"
