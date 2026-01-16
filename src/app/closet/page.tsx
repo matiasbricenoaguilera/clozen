@@ -160,7 +160,7 @@ export default function ClosetPage() {
 
       // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
       // en lugar de traer TODOS los box_id (puede ser miles de registros)
-      const boxIds = (data || []).map(box => box.id)
+      const boxIds = (data || []).map((box: { id: string; name: string }) => box.id)
       
       // Si no hay cajas, retornar vacío
       if (boxIds.length === 0) {
