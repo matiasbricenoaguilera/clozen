@@ -186,7 +186,7 @@ export default function ClosetPage() {
 
       // Crear mapa de conteos
       const countMap = new Map<string, number>()
-      boxIds.forEach((boxId, index) => {
+      boxIds.forEach((boxId: string, index: number) => {
         countMap.set(boxId, countResults[index].count || 0)
       })
 
