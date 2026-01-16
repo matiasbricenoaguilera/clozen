@@ -10,7 +10,7 @@
     "dev": "dotenv -e .env.local -- next dev",
     "build": "next build",
     "build:local": "dotenv -e .env.local -- next build",
-    "build:analyze": "ANALYZE=true next build",
+    "build:analyze": "ANALYZE=true next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
