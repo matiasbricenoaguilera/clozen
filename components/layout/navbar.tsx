@@ -5,11 +5,12 @@ import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
+import { ProgressBar } from '@/components/ui/progress-bar'
 import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home, Menu, X } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
-  const { userProfile, signOut } = useAuth()
+  const { userProfile, signOut, loading: authLoading } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Log de diagnóstico
@@ -33,7 +34,10 @@ export function Navbar() {
   }
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <>
+      {/* Barra de progreso para carga de perfil */}
+      <ProgressBar loading={authLoading} />
+      <nav className="fixed top-0 left-0 right-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center px-4">
         <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
           <Shirt className="h-6 w-6" />
@@ -228,5 +232,6 @@ export function Navbar() {
         </div>
       )}
     </nav>
+    </>
   )
 }
