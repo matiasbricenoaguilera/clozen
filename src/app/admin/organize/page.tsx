@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
@@ -34,6 +34,19 @@ export default function AdminOrganizePage() {
   const [showMoveModal, setShowMoveModal] = useState(false)
   const [garmentToMove, setGarmentToMove] = useState<Garment | null>(null)
   const [selectedBoxId, setSelectedBoxId] = useState<string>('')
+  
+  // ✅ AGREGAR: Estados para búsqueda en lote
+  const [batchCodes, setBatchCodes] = useState<string>('')
+  const [foundGarmentsBatch, setFoundGarmentsBatch] = useState<Garment[]>([])
+  const [searchingBatch, setSearchingBatch] = useState(false)
+  const [selectedBoxForBatch, setSelectedBoxForBatch] = useState<string>('')
+  const [assigningBox, setAssigningBox] = useState(false)
+  const [batchError, setBatchError] = useState('')
+  const [hasEnoughSpace, setHasEnoughSpace] = useState(true)
+  const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number } | null>(null)
+  
+  // Refs para optimizar escritura rápida de Scanner Keyboard
+  const batchCodesRef = useRef<string>('')
 
   useEffect(() => {
     loadData()
@@ -99,20 +112,24 @@ export default function AdminOrganizePage() {
     }
   }
 
-  // ✅ AGREGAR: Función para manejar la lectura NFC exitosa
+  // ✅ ACTUALIZAR: Función para manejar la lectura NFC exitosa (agregar a lote)
   const handleNFCRead = async (tagId: string) => {
     // Normalizar el código NFC (limpiar espacios y convertir a mayúsculas)
     const normalizedTagId = tagId.trim().toUpperCase()
     console.log('📱 Código NFC leído:', { original: tagId, normalized: normalizedTagId })
     
-    // Asignar el código normalizado al input y buscar automáticamente
-    setScanInput(normalizedTagId)
+    // Agregar al batchCodes (separado por /)
+    const newBatchCodes = batchCodes 
+      ? `${batchCodes}/${normalizedTagId}`
+      : normalizedTagId
+    
+    setBatchCodes(newBatchCodes)
+    batchCodesRef.current = newBatchCodes
     
     // Cerrar el scanner después de leer exitosamente
     setNfcScanMode(null)
     
-    // Buscar la prenda automáticamente
-    await findGarmentByCode(normalizedTagId, 'nfc')
+    // NO buscar automáticamente - el usuario puede agregar más códigos antes de buscar
   }
 
   // ✅ AGREGAR: Función para buscar prenda por código (extracto de findGarment)
@@ -164,6 +181,280 @@ export default function AdminOrganizePage() {
 
     await findGarmentByCode(scanInput, scanMode || 'nfc')
   }
+
+  // ✅ AGREGAR: Función para normalizar códigos
+  const normalizeCode = (code: string): string => {
+    return code.trim().toUpperCase()
+  }
+
+  // ✅ AGREGAR: Función optimizada para buscar múltiples prendas por códigos
+  const searchBatchGarments = useCallback(async () => {
+    const codesToUse = batchCodesRef.current || batchCodes
+    
+    if (!codesToUse.trim()) {
+      setBatchError('Ingresa al menos un código')
+      return
+    }
+
+    setSearchingBatch(true)
+    setBatchError('')
+    setFoundGarmentsBatch([])
+
+    try {
+      // Separar códigos por "/", espacios, comas, saltos de línea, etc.
+      const codes = codesToUse
+        .split(/[/,\n\r\t; ]+/)
+        .map(code => normalizeCode(code))
+        .filter(code => code.length > 0)
+
+      if (codes.length === 0) {
+        setBatchError('No se encontraron códigos válidos')
+        setSearchingBatch(false)
+        return
+      }
+
+      // Limitar cantidad de códigos para evitar consultas muy grandes
+      const maxCodes = 50
+      const codesToSearch = codes.slice(0, maxCodes)
+      if (codes.length > maxCodes) {
+        setBatchError(`⚠️ Se buscarán solo los primeros ${maxCodes} códigos de ${codes.length} ingresados`)
+      }
+
+      console.log('🔍 Buscando códigos:', codesToSearch.length)
+
+      // OPTIMIZACIÓN: Si hay pocos códigos (≤10), usar búsquedas individuales
+      // Si hay muchos, usar .in() dividido en chunks
+      let garmentsByNfc: Garment[] = []
+      let garmentsByBarcode: Garment[] = []
+      
+      if (codesToSearch.length <= 10) {
+        // Para pocos códigos: búsquedas individuales en paralelo
+        const nfcQueries = codesToSearch.map(code => 
+          supabase
+            .from('garments')
+            .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, user_id, created_at')
+            .eq('nfc_tag_id', code)
+            .maybeSingle()
+        )
+        
+        const barcodeQueries = codesToSearch.map(code =>
+          supabase
+            .from('garments')
+            .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, user_id, created_at')
+            .eq('barcode_id', code)
+            .maybeSingle()
+        )
+        
+        const [nfcResults, barcodeResults] = await Promise.all([
+          Promise.all(nfcQueries),
+          Promise.all(barcodeQueries)
+        ])
+        
+        garmentsByNfc = nfcResults
+          .map(r => r.data)
+          .filter(Boolean) as Garment[]
+        garmentsByBarcode = barcodeResults
+          .map(r => r.data)
+          .filter(Boolean) as Garment[]
+      } else {
+        // Para muchos códigos: usar .in() con chunks
+        const chunkSize = 20
+        const nfcChunks: Promise<{ data: Garment[] | null; error: any }>[] = []
+        const barcodeChunks: Promise<{ data: Garment[] | null; error: any }>[] = []
+        
+        for (let i = 0; i < codesToSearch.length; i += chunkSize) {
+          const chunk = codesToSearch.slice(i, i + chunkSize)
+          nfcChunks.push(
+            supabase
+              .from('garments')
+              .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, user_id, created_at')
+              .in('nfc_tag_id', chunk)
+          )
+          barcodeChunks.push(
+            supabase
+              .from('garments')
+              .select('id, name, type, color, season, style, image_url, box_id, nfc_tag_id, barcode_id, status, user_id, created_at')
+              .in('barcode_id', chunk)
+          )
+        }
+        
+        const [nfcChunkResults, barcodeChunkResults] = await Promise.all([
+          Promise.all(nfcChunks),
+          Promise.all(barcodeChunks)
+        ])
+        
+        garmentsByNfc = nfcChunkResults
+          .flatMap(r => r.data || [])
+        garmentsByBarcode = barcodeChunkResults
+          .flatMap(r => r.data || [])
+      }
+
+      // Combinar resultados y eliminar duplicados
+      const allFoundGarments = new Map<string, Garment>()
+      
+      garmentsByNfc.forEach((garment: Garment) => {
+        allFoundGarments.set(garment.id, garment)
+      })
+      
+      garmentsByBarcode.forEach((garment: Garment) => {
+        allFoundGarments.set(garment.id, garment)
+      })
+
+      const foundGarments = Array.from(allFoundGarments.values())
+      
+      // Crear un mapa de códigos encontrados
+      const foundCodesMap = new Map<string, boolean>()
+      foundGarments.forEach(garment => {
+        if (garment.nfc_tag_id && codes.includes(garment.nfc_tag_id)) {
+          foundCodesMap.set(garment.nfc_tag_id, true)
+        }
+        if (garment.barcode_id && codes.includes(garment.barcode_id)) {
+          foundCodesMap.set(garment.barcode_id, true)
+        }
+      })
+
+      const notFoundCodes = codes.filter(code => !foundCodesMap.has(code))
+
+      setFoundGarmentsBatch(foundGarments)
+
+      // Mostrar mensajes informativos
+      if (notFoundCodes.length > 0 && foundGarments.length === 0) {
+        setBatchError(`❌ No se encontraron prendas para los códigos: ${notFoundCodes.join(', ')}`)
+      } else if (notFoundCodes.length > 0) {
+        setBatchError(`⚠️ Se encontraron ${foundGarments.length} prendas. No se encontraron: ${notFoundCodes.join(', ')}`)
+      } else if (foundGarments.length > 0) {
+        const inUseCount = foundGarments.filter(g => g.status === 'in_use').length
+        if (inUseCount > 0) {
+          setBatchError(`ℹ️ Se encontraron ${foundGarments.length} prendas (${inUseCount} en uso - se restaurarán al asignar caja)`)
+        } else {
+          setBatchError('')
+        }
+      } else {
+        setBatchError('')
+      }
+    } catch (error) {
+      console.error('❌ Error searching batch garments:', error)
+      setBatchError(`Error al buscar las prendas: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setSearchingBatch(false)
+    }
+  }, [batchCodes])
+
+  // ✅ AGREGAR: Función para asignar caja a todo el lote
+  const assignBoxToBatch = async () => {
+    if (!selectedBoxForBatch || foundGarmentsBatch.length === 0) {
+      setBatchError('Selecciona una caja')
+      return
+    }
+
+    setAssigningBox(true)
+    setBatchError('')
+
+    try {
+      // Obtener conteo actualizado de prendas disponibles en la caja seleccionada
+      const { count: currentCount } = await supabase
+        .from('garments')
+        .select('*', { count: 'exact', head: true })
+        .eq('box_id', selectedBoxForBatch)
+        .eq('status', 'available')
+
+      const currentBoxCount = currentCount || 0
+      const garmentsToAssign = foundGarmentsBatch.length
+      const newCount = currentBoxCount + garmentsToAssign
+
+      // Si la caja se llenará, buscar la más vacía
+      let targetBoxId = selectedBoxForBatch
+      if (newCount > 15) {
+        // Buscar caja más vacía
+        const availableBoxes = boxes
+          .filter(box => (box.garment_count || 0) < 15)
+          .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+        
+        if (availableBoxes.length > 0) {
+          targetBoxId = availableBoxes[0].id
+        }
+      }
+
+      const garmentIds = foundGarmentsBatch.map(g => g.id)
+      const inUseGarments = foundGarmentsBatch.filter(g => g.status === 'in_use')
+
+      // Actualizar todas las prendas
+      const { error: updateError } = await supabase
+        .from('garments')
+        .update({
+          box_id: targetBoxId,
+          status: 'available'
+        })
+        .in('id', garmentIds)
+
+      if (updateError) throw updateError
+
+      const targetBox = boxes.find(b => b.id === targetBoxId)
+      const boxName = targetBox?.name || 'caja desconocida'
+      const boxLocation = targetBox?.location
+
+      // Recargar datos
+      await loadData()
+
+      // Limpiar estados
+      batchCodesRef.current = ''
+      setBatchCodes('')
+      setFoundGarmentsBatch([])
+      setSelectedBoxForBatch('')
+      setNfcScanMode(null)
+      setScanMode(null)
+
+      setSuccess(
+        `✅ ${foundGarmentsBatch.length} prenda(s) asignada(s) a la caja "${boxName}"${boxLocation ? ` (📍 ${boxLocation})` : ''}${inUseGarments.length > 0 ? `. ${inUseGarments.length} restaurada(s).` : ''}`
+      )
+    } catch (error) {
+      console.error('Error assigning box to batch:', error)
+      setBatchError(`Error al asignar caja: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setAssigningBox(false)
+    }
+  }
+
+  // ✅ AGREGAR: Manejar cambios en el input de códigos
+  const handleBatchCodesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+    setBatchCodes(newValue)
+    batchCodesRef.current = newValue
+  }, [])
+
+  // ✅ AGREGAR: Manejar pegado de códigos
+  const handleBatchCodesPaste = useCallback((e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    const pastedText = e.clipboardData.getData('text')
+    const codes = pastedText
+      .split(/[\n\r\t,; ]+/)
+      .map(code => code.trim())
+      .filter(code => code.length > 0)
+    
+    let newValue: string
+    if (codes.length > 1) {
+      newValue = batchCodes 
+        ? `${batchCodes}/${codes.join('/')}`
+        : codes.join('/')
+    } else if (codes.length === 1) {
+      newValue = batchCodes && codes[0]
+        ? `${batchCodes}/${codes[0]}`
+        : codes[0] || ''
+    } else {
+      newValue = batchCodes
+    }
+    
+    batchCodesRef.current = newValue
+    setBatchCodes(newValue)
+  }, [batchCodes])
+
+  // ✅ AGREGAR: Contador de códigos detectados
+  const detectedCodesCount = useMemo(() => {
+    if (!batchCodes.trim()) return 0
+    return batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length
+  }, [batchCodes])
 
   // Función para obtener cajas recomendadas (< 60% = 9 prendas de 15)
   const getRecommendedBoxes = () => {
@@ -387,114 +678,269 @@ export default function AdminOrganizePage() {
                 <span className="text-xs text-muted-foreground hidden sm:inline">Ingresa o escanea el código de barras</span>
               </Button>
             </div>
-          ) : scanMode === 'nfc' && !nfcScanMode ? (
-            // ✅ AGREGAR: Opciones para NFC (scanner o manual)
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Elige cómo quieres escanear el código NFC:
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setNfcScanMode('scanner')}
-                  size="lg"
-                  className="h-auto flex-col gap-2 py-4"
-                >
-                  <Smartphone className="h-6 w-6" />
-                  <span className="font-semibold">Escanear con Teléfono</span>
-                  <span className="text-xs text-muted-foreground">Usa Web NFC para leer el tag</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setNfcScanMode('manual')}
-                  size="lg"
-                  className="h-auto flex-col gap-2 py-4"
-                >
-                  <Scan className="h-6 w-6" />
-                  <span className="font-semibold">Ingresar Manualmente</span>
-                  <span className="text-xs text-muted-foreground">Pega el código NFC aquí</span>
-                </Button>
-              </div>
-              <Button 
-                onClick={() => { 
-                  setScanMode(null)
-                  setNfcScanMode(null)
-                  setScanInput('')
-                  setFoundGarment(null)
-                  setError('')
-                  setSuccess('')
-                }} 
-                variant="outline" 
-                size="lg"
-                className="w-full"
-              >
-                Cancelar
-              </Button>
-            </div>
-          ) : scanMode === 'nfc' && nfcScanMode === 'scanner' ? (
-            // ✅ AGREGAR: Mostrar scanner NFC
-            <div className="space-y-4">
-              <NFCScanner
-                mode="read"
-                onSuccess={handleNFCRead}
-                onError={(error) => {
-                  setError(`Error NFC: ${error}`)
-                  // No cerrar el scanner automáticamente si hay error, permitir reintentar
-                }}
-                title="Escanear Tag NFC Existente"
-                description="Acércate un tag NFC que ya contenga un ID para buscar la prenda asociada"
-              />
-              <Button 
-                onClick={() => { 
-                  setNfcScanMode(null)
-                  setError('')
-                }} 
-                variant="outline" 
-                size="lg"
-                className="w-full"
-              >
-                Volver
-              </Button>
-            </div>
-          ) : scanMode === 'nfc' && nfcScanMode === 'manual' ? (
-            // ✅ AGREGAR: Input manual para NFC
+          ) : scanMode === 'nfc' ? (
+            // ✅ ACTUALIZAR: Input de múltiples códigos con opción de escanear
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  📱 Código NFC
+                  📱 Códigos NFC o Barcode (separados por "/")
                 </label>
-                <Input
-                  value={scanInput}
-                  onChange={(e) => setScanInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      findGarment()
-                    }
-                  }}
-                  placeholder="Ej: AA:BB:CC:DD:EE:FF o pega el código aquí"
-                  className="font-mono text-lg h-12"
-                  autoFocus
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={batchCodes}
+                    onChange={handleBatchCodesChange}
+                    onPaste={handleBatchCodesPaste}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (batchCodesRef.current.trim() && !searchingBatch) {
+                          searchBatchGarments()
+                        }
+                      }
+                    }}
+                    placeholder="Ej: AA:11:22:BB:EE / 123456789 / CC:33:44:DD:FF"
+                    className="font-mono text-sm flex-1"
+                    autoFocus
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => setNfcScanMode('scanner')}
+                    size="lg"
+                    title="Escanear con teléfono"
+                  >
+                    <Smartphone className="h-5 w-5" />
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Pega el código NFC que leíste con tu aplicación o escáner
+                  💡 Puedes pegar múltiples códigos separados por "/", comas, espacios o saltos de línea. También puedes escanear con el botón 📱.
                 </p>
+                {batchCodes && (
+                  <div className="text-xs text-muted-foreground p-2 bg-muted rounded mt-2">
+                    <strong>Códigos detectados:</strong> {detectedCodesCount}
+                  </div>
+                )}
               </div>
+
+              {batchError && (
+                <div className={`p-3 rounded-lg border ${
+                  batchError.includes('❌') 
+                    ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                    : 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800'
+                }`}>
+                  <p className={`text-sm ${
+                    batchError.includes('❌')
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-yellow-700 dark:text-yellow-300'
+                  }`}>{batchError}</p>
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <Button onClick={findGarment} size="lg" className="flex-1">
-                  <Search className="h-4 w-4 mr-2" />
-                  Buscar Prenda
+                <Button 
+                  onClick={searchBatchGarments} 
+                  size="lg" 
+                  className="flex-1"
+                  disabled={searchingBatch || !batchCodes.trim()}
+                >
+                  {searchingBatch ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Buscar Prendas
+                    </>
+                  )}
                 </Button>
                 <Button 
                   onClick={() => { 
+                    setScanMode(null)
                     setNfcScanMode(null)
-                    setScanInput('')
+                    setBatchCodes('')
+                    batchCodesRef.current = ''
+                    setFoundGarmentsBatch([])
+                    setSelectedBoxForBatch('')
+                    setBatchError('')
+                    setError('')
+                    setSuccess('')
                   }} 
                   variant="outline" 
                   size="lg"
                 >
-                  Volver
+                  Cancelar
                 </Button>
               </div>
+
+              {/* Scanner NFC (si está activo) */}
+              {nfcScanMode === 'scanner' && (
+                <div className="border-t pt-4">
+                  <NFCScanner
+                    mode="read"
+                    onSuccess={handleNFCRead}
+                    onError={(error) => {
+                      setBatchError(`Error NFC: ${error}`)
+                    }}
+                    title="Escanear Tag NFC"
+                    description="Acércate un tag NFC para agregarlo a la lista de códigos"
+                  />
+                  <Button 
+                    onClick={() => { 
+                      setNfcScanMode(null)
+                      setBatchError('')
+                    }} 
+                    variant="outline" 
+                    size="lg"
+                    className="w-full mt-2"
+                  >
+                    Cerrar Scanner
+                  </Button>
+                </div>
+              )}
+
+              {/* Lista de prendas encontradas */}
+              {foundGarmentsBatch.length > 0 && (
+                <div className="space-y-4 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">
+                      Prendas Encontradas ({foundGarmentsBatch.length})
+                    </h3>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {foundGarmentsBatch.map(garment => {
+                      const isInUse = garment.status === 'in_use'
+                      return (
+                        <Card 
+                          key={garment.id} 
+                          className={`p-3 ${isInUse ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                              {garment.image_url ? (
+                                <Image
+                                  src={garment.image_url}
+                                  alt={garment.name}
+                                  width={64}
+                                  height={64}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Shirt className="h-6 w-6 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium truncate">{garment.name}</p>
+                                {isInUse && (
+                                  <Badge variant="destructive" className="text-xs">
+                                    En Uso
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{garment.type}</p>
+                              {garment.nfc_tag_id && (
+                                <p className="text-xs text-muted-foreground font-mono">NFC: {garment.nfc_tag_id}</p>
+                              )}
+                              {garment.barcode_id && (
+                                <p className="text-xs text-muted-foreground font-mono">Barcode: {garment.barcode_id}</p>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      )
+                    })}
+                  </div>
+
+                  {/* Selector de caja para asignar al lote */}
+                  {foundGarmentsBatch.length > 0 && (
+                    <div className="space-y-3 border-t pt-4">
+                      <div>
+                        <label className="text-sm font-medium mb-2 block">
+                          Asignar caja a todo el lote
+                        </label>
+                        {foundGarmentsBatch.filter(g => g.status === 'in_use').length > 0 && (
+                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
+                            ⚠️ {foundGarmentsBatch.filter(g => g.status === 'in_use').length} prenda(s) se restaurarán
+                          </p>
+                        )}
+                        <Select
+                          value={selectedBoxForBatch}
+                          onValueChange={(value) => {
+                            setSelectedBoxForBatch(value)
+                            const box = boxes.find(b => b.id === value)
+                            if (box) {
+                              const availableSpace = 15 - (box.garment_count || 0)
+                              const willFit = foundGarmentsBatch.length <= availableSpace
+                              setSelectedBoxInfo({
+                                name: box.name,
+                                location: box.location || undefined,
+                                currentCount: box.garment_count || 0,
+                                availableSpace
+                              })
+                              setHasEnoughSpace(willFit)
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una caja" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sin caja</SelectItem>
+                            {boxes.map((box) => {
+                              const availableSpace = 15 - (box.garment_count || 0)
+                              const isFull = (box.garment_count || 0) >= 15
+                              const willFit = foundGarmentsBatch.length <= availableSpace
+                              return (
+                                <SelectItem 
+                                  key={box.id} 
+                                  value={box.id}
+                                  disabled={isFull || !willFit}
+                                >
+                                  {box.name} {box.location ? `(${box.location})` : ''} - {box.garment_count || 0}/15
+                                  {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {selectedBoxInfo && selectedBoxForBatch && selectedBoxForBatch !== 'none' && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            {hasEnoughSpace
+                              ? `✅ Asignarás ${foundGarmentsBatch.length} prenda(s) a la caja "${selectedBoxInfo.name}"${selectedBoxInfo.location ? ` (📍 ${selectedBoxInfo.location})` : ''}. Quedarán ${selectedBoxInfo.availableSpace - foundGarmentsBatch.length} espacios disponibles.`
+                              : `❌ No hay suficiente espacio. Disponible: ${selectedBoxInfo.availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas`
+                            }
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button
+                        onClick={assignBoxToBatch}
+                        disabled={assigningBox || !selectedBoxForBatch || selectedBoxForBatch === 'none' || !hasEnoughSpace}
+                        size="lg"
+                        className="w-full"
+                      >
+                        {assigningBox ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Asignando...
+                          </>
+                        ) : (
+                          <>
+                            <Package className="h-4 w-4 mr-2" />
+                            Asignar Caja al Lote
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             // ✅ MANTENER: Input para código de barras
