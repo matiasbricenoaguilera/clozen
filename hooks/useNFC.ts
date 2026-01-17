@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { NFCReadResult, NFCWriteResult } from '@/types'
 import { supabase } from '@/lib/supabase'
 
@@ -9,7 +9,7 @@ export function useNFC() {
   const [isReading, setIsReading] = useState(false)
   const [isWriting, setIsWriting] = useState(false)
 
-  // Verificar si Web NFC está soportado con más detalle
+  // ✅ MEJORAR: Verificar si Web NFC está soportado con más detalle
   const checkNFCSupport = useCallback(() => {
     // Verificar soporte básico
     if (!('NDEFReader' in window)) {
@@ -18,9 +18,17 @@ export function useNFC() {
       return false
     }
 
-    // Verificar HTTPS (requerido para Web NFC)
-    if (typeof window !== 'undefined' && window.location.protocol !== 'https:') {
-      console.log('❌ Web NFC: Se requiere HTTPS, actualmente:', window.location.protocol)
+    // ✅ MEJORAR: Permitir HTTPS O localhost (para desarrollo)
+    const isSecureContext = 
+      typeof window !== 'undefined' && (
+        window.location.protocol === 'https:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.endsWith('.localhost')
+      )
+
+    if (!isSecureContext) {
+      console.log('❌ Web NFC: Se requiere HTTPS o localhost, actualmente:', window.location.protocol, window.location.hostname)
       setIsSupported(false)
       return false
     }
@@ -30,18 +38,43 @@ export function useNFC() {
     return true
   }, [])
 
-  // Agregar función para obtener información detallada de compatibilidad
+  // ✅ AGREGAR: Inicializar verificación al montar
+  useEffect(() => {
+    // Verificar soporte cuando el componente se monta
+    checkNFCSupport()
+  }, [checkNFCSupport])
+
+  // ✅ MEJORAR: Agregar función para obtener información detallada de compatibilidad
   const getNFCSupportInfo = useCallback(() => {
+    const isSecureContext = 
+      typeof window !== 'undefined' && (
+        window.location.protocol === 'https:' ||
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.endsWith('.localhost')
+      )
+
     const info = {
       hasNDEFReader: 'NDEFReader' in window,
       isHTTPS: typeof window !== 'undefined' && window.location.protocol === 'https:',
+      isLocalhost: typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'),
+      isSecureContext: isSecureContext, // ✅ Agregar verificación de contexto seguro
       isMobile: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
         navigator.userAgent
       ),
       isChromeAndroid: /Chrome/i.test(navigator.userAgent) && /Android/i.test(navigator.userAgent),
+      chromeVersion: (() => {
+        const match = navigator.userAgent.match(/Chrome\/(\d+)/)
+        return match ? parseInt(match[1]) : null
+      })(),
+      androidVersion: (() => {
+        const match = navigator.userAgent.match(/Android (\d+(\.\d+)?)/)
+        return match ? match[1] : null
+      })(),
       userAgent: navigator.userAgent,
       protocol: typeof window !== 'undefined' ? window.location.protocol : 'unknown',
-      hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown'
+      hostname: typeof window !== 'undefined' ? window.location.hostname : 'unknown',
+      fullUrl: typeof window !== 'undefined' ? window.location.href : 'unknown'
     }
 
     console.log('🔍 Información detallada de NFC:', info)

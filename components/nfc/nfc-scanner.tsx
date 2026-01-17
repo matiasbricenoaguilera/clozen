@@ -93,16 +93,45 @@ export function NFCScanner({
                   <p>❌ NDEFReader no soportado en este navegador</p>
                 )}
 
-                {!supportInfo.isHTTPS && (
-                  <p>❌ Se requiere HTTPS (actualmente: {supportInfo.protocol})</p>
+                {!supportInfo.isSecureContext && (
+                  <p>❌ Se requiere HTTPS o localhost (actualmente: {supportInfo.protocol} - {supportInfo.hostname})</p>
                 )}
 
-                {!supportInfo.isChromeAndroid && (
-                  <p>⚠️ Recomendado: Chrome en Android</p>
+                {supportInfo.chromeVersion && supportInfo.chromeVersion < 89 && (
+                  <p>⚠️ Chrome versión {supportInfo.chromeVersion} - Se requiere Chrome 89+</p>
+                )}
+
+                {supportInfo.androidVersion && parseFloat(supportInfo.androidVersion) < 8.1 && (
+                  <p>⚠️ Android {supportInfo.androidVersion} - Se requiere Android 8.1+</p>
+                )}
+
+                {!supportInfo.isChromeAndroid && supportInfo.isMobile && (
+                  <p>⚠️ No es Chrome Android - Web NFC solo funciona en Chrome</p>
                 )}
 
                 {!supportInfo.isMobile && (
                   <p>⚠️ Recomendado: Dispositivo móvil</p>
+                )}
+
+                {/* ✅ AGREGAR: Mostrar información útil si todo parece correcto */}
+                {supportInfo.hasNDEFReader && supportInfo.isSecureContext && supportInfo.isChromeAndroid && (
+                  <div className="text-green-600 dark:text-green-400 space-y-1 mt-3 pt-3 border-t border-green-300 dark:border-green-700">
+                    <p>✅ NDEFReader disponible</p>
+                    <p>✅ Contexto seguro (HTTPS/localhost)</p>
+                    <p>✅ Chrome Android detectado</p>
+                    {supportInfo.chromeVersion && <p>✅ Chrome versión {supportInfo.chromeVersion}</p>}
+                    {supportInfo.androidVersion && <p>✅ Android {supportInfo.androidVersion}</p>}
+                    <div className="mt-3 pt-3 border-t border-green-300 dark:border-green-700">
+                      <p className="font-medium text-yellow-600 dark:text-yellow-400">⚠️ Si aún no funciona, verifica:</p>
+                      <ul className="list-disc list-inside ml-2 text-xs space-y-0.5 mt-1">
+                        <li>NFC activado en el dispositivo</li>
+                        <li>Permisos de NFC para Chrome (Configuración &gt; Apps &gt; Chrome &gt; Permisos)</li>
+                        <li>Reiniciar Chrome después de activar NFC</li>
+                        <li>Probar en modo incógnito (para descartar extensiones)</li>
+                        <li>El dispositivo tiene hardware NFC</li>
+                      </ul>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
