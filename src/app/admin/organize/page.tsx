@@ -56,20 +56,28 @@ export default function AdminOrganizePage() {
 
       if (boxesError) throw boxesError
 
-      // OPTIMIZACIÓN: Obtener todos los conteos en una sola consulta
-      const { data: garmentsCountData } = await supabase
-        .from('garments')
-        .select('box_id')
-        .eq('status', 'available')
-        .not('box_id', 'is', null)
+      // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
+      // en lugar de traer TODOS los box_id (puede ser miles de registros)
+      const boxIds = (boxesData || []).map((box: { id: string; name: string }) => box.id)
+      
+      // Si no hay cajas, continuar sin conteos
+      let countMap = new Map<string, number>()
+      if (boxIds.length > 0) {
+        // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
+        // Esto es MUCHO más eficiente que traer todos los registros
+        const countQueries = boxIds.map((boxId: string) =>
+          supabase
+            .from('garments')
+            .select('*', { count: 'exact', head: true })
+            .eq('box_id', boxId)
+            .eq('status', 'available')
+        )
 
-      // Crear mapa de conteos
-      const countMap = new Map<string, number>()
-      if (garmentsCountData) {
-        garmentsCountData.forEach((item: any) => {
-          if (item.box_id) {
-            countMap.set(item.box_id, (countMap.get(item.box_id) || 0) + 1)
-          }
+        const countResults = await Promise.all(countQueries)
+
+        // Crear mapa de conteos
+        boxIds.forEach((boxId: string, index: number) => {
+          countMap.set(boxId, countResults[index].count || 0)
         })
       }
 
