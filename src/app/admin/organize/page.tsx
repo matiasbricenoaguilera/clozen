@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { NFCScanner } from '@/components/nfc/nfc-scanner'
 import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
@@ -21,6 +22,7 @@ export default function AdminOrganizePage() {
   const [loading, setLoading] = useState(true)
   const [scanMode, setScanMode] = useState<'nfc' | 'barcode' | null>(null)
   const [scanInput, setScanInput] = useState('')
+  const [nfcScanMode, setNfcScanMode] = useState<'scanner' | 'manual' | null>(null) // Controlar si mostrar scanner o input manual
   const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
   const [organizingGarment, setOrganizingGarment] = useState(false)
   const [error, setError] = useState('')
@@ -97,8 +99,25 @@ export default function AdminOrganizePage() {
     }
   }
 
-  const findGarment = async () => {
-    if (!scanInput.trim()) {
+  // ✅ AGREGAR: Función para manejar la lectura NFC exitosa
+  const handleNFCRead = async (tagId: string) => {
+    // Normalizar el código NFC (limpiar espacios y convertir a mayúsculas)
+    const normalizedTagId = tagId.trim().toUpperCase()
+    console.log('📱 Código NFC leído:', { original: tagId, normalized: normalizedTagId })
+    
+    // Asignar el código normalizado al input y buscar automáticamente
+    setScanInput(normalizedTagId)
+    
+    // Cerrar el scanner después de leer exitosamente
+    setNfcScanMode(null)
+    
+    // Buscar la prenda automáticamente
+    await findGarmentByCode(normalizedTagId, 'nfc')
+  }
+
+  // ✅ AGREGAR: Función para buscar prenda por código (extracto de findGarment)
+  const findGarmentByCode = async (code: string, mode: 'nfc' | 'barcode') => {
+    if (!code.trim()) {
       setError('Ingresa un código para buscar')
       return
     }
@@ -109,17 +128,19 @@ export default function AdminOrganizePage() {
     try {
       let query = supabase.from('garments').select('*')
 
-      if (scanMode === 'nfc') {
-        query = query.eq('nfc_tag_id', scanInput.trim())
-      } else if (scanMode === 'barcode') {
-        query = query.eq('barcode_id', scanInput.trim())
+      // Normalizar código NFC (mayúsculas y sin espacios)
+      if (mode === 'nfc') {
+        const normalizedCode = code.trim().toUpperCase()
+        query = query.eq('nfc_tag_id', normalizedCode)
+      } else if (mode === 'barcode') {
+        query = query.eq('barcode_id', code.trim())
       }
 
       const { data, error } = await query.single()
 
       if (error) {
         if (error.code === 'PGRST116') {
-          setError(`No se encontró ninguna prenda con ese código ${scanMode === 'nfc' ? 'NFC' : 'de barras'}`)
+          setError(`No se encontró ninguna prenda con ese código ${mode === 'nfc' ? 'NFC' : 'de barras'}`)
         } else {
           throw error
         }
@@ -132,6 +153,16 @@ export default function AdminOrganizePage() {
       console.error('Error finding garment:', error)
       setError('Error al buscar la prenda')
     }
+  }
+
+  // ✅ ACTUALIZAR: Función findGarment para usar findGarmentByCode
+  const findGarment = async () => {
+    if (!scanInput.trim()) {
+      setError('Ingresa un código para buscar')
+      return
+    }
+
+    await findGarmentByCode(scanInput, scanMode || 'nfc')
   }
 
   // Función para obtener cajas recomendadas (< 60% = 9 prendas de 15)
@@ -356,11 +387,81 @@ export default function AdminOrganizePage() {
                 <span className="text-xs text-muted-foreground hidden sm:inline">Ingresa o escanea el código de barras</span>
               </Button>
             </div>
-          ) : (
+          ) : scanMode === 'nfc' && !nfcScanMode ? (
+            // ✅ AGREGAR: Opciones para NFC (scanner o manual)
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Elige cómo quieres escanear el código NFC:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setNfcScanMode('scanner')}
+                  size="lg"
+                  className="h-auto flex-col gap-2 py-4"
+                >
+                  <Smartphone className="h-6 w-6" />
+                  <span className="font-semibold">Escanear con Teléfono</span>
+                  <span className="text-xs text-muted-foreground">Usa Web NFC para leer el tag</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setNfcScanMode('manual')}
+                  size="lg"
+                  className="h-auto flex-col gap-2 py-4"
+                >
+                  <Scan className="h-6 w-6" />
+                  <span className="font-semibold">Ingresar Manualmente</span>
+                  <span className="text-xs text-muted-foreground">Pega el código NFC aquí</span>
+                </Button>
+              </div>
+              <Button 
+                onClick={() => { 
+                  setScanMode(null)
+                  setNfcScanMode(null)
+                  setScanInput('')
+                  setFoundGarment(null)
+                  setError('')
+                  setSuccess('')
+                }} 
+                variant="outline" 
+                size="lg"
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+            </div>
+          ) : scanMode === 'nfc' && nfcScanMode === 'scanner' ? (
+            // ✅ AGREGAR: Mostrar scanner NFC
+            <div className="space-y-4">
+              <NFCScanner
+                mode="read"
+                onSuccess={handleNFCRead}
+                onError={(error) => {
+                  setError(`Error NFC: ${error}`)
+                  // No cerrar el scanner automáticamente si hay error, permitir reintentar
+                }}
+                title="Escanear Tag NFC Existente"
+                description="Acércate un tag NFC que ya contenga un ID para buscar la prenda asociada"
+              />
+              <Button 
+                onClick={() => { 
+                  setNfcScanMode(null)
+                  setError('')
+                }} 
+                variant="outline" 
+                size="lg"
+                className="w-full"
+              >
+                Volver
+              </Button>
+            </div>
+          ) : scanMode === 'nfc' && nfcScanMode === 'manual' ? (
+            // ✅ AGREGAR: Input manual para NFC
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  {scanMode === 'nfc' ? '📱 Código NFC' : '📊 Código de Barras'}
+                  📱 Código NFC
                 </label>
                 <Input
                   value={scanInput}
@@ -370,14 +471,52 @@ export default function AdminOrganizePage() {
                       findGarment()
                     }
                   }}
-                  placeholder={scanMode === 'nfc' ? 'Ej: AA:BB:CC:DD:EE:FF o pega el código aquí' : 'Ej: 1234567890123 o escanea el código'}
+                  placeholder="Ej: AA:BB:CC:DD:EE:FF o pega el código aquí"
                   className="font-mono text-lg h-12"
                   autoFocus
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {scanMode === 'nfc' 
-                    ? 'Pega el código NFC que leíste con tu aplicación o escáner'
-                    : 'Ingresa el código de barras manualmente o usa un escáner'}
+                  Pega el código NFC que leíste con tu aplicación o escáner
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={findGarment} size="lg" className="flex-1">
+                  <Search className="h-4 w-4 mr-2" />
+                  Buscar Prenda
+                </Button>
+                <Button 
+                  onClick={() => { 
+                    setNfcScanMode(null)
+                    setScanInput('')
+                  }} 
+                  variant="outline" 
+                  size="lg"
+                >
+                  Volver
+                </Button>
+              </div>
+            </div>
+          ) : (
+            // ✅ MANTENER: Input para código de barras
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  📊 Código de Barras
+                </label>
+                <Input
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      findGarment()
+                    }
+                  }}
+                  placeholder="Ej: 1234567890123 o escanea el código"
+                  className="font-mono text-lg h-12"
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ingresa el código de barras manualmente o usa un escáner
                 </p>
               </div>
               <div className="flex gap-2">
@@ -388,6 +527,7 @@ export default function AdminOrganizePage() {
                 <Button 
                   onClick={() => { 
                     setScanMode(null)
+                    setNfcScanMode(null)
                     setScanInput('')
                     setFoundGarment(null)
                     setError('')
