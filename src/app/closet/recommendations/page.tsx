@@ -8,7 +8,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { recommendOutfits } from '@/utils/outfit-recommendations'
+import { recommendOutfits, OutfitSuggestion } from '@/utils/outfit-recommendations'
 import { getWeatherByCity } from '@/utils/weather'
 import { WeatherData, Garment, Box } from '@/types'
 import { Shirt, Sparkles, Cloud, Package, Hand, Loader2 } from 'lucide-react'
@@ -29,7 +29,7 @@ export default function RecommendationsPage() {
   const [garments, setGarments] = useState<Garment[]>([])
   const [boxes, setBoxes] = useState<Box[]>([])
   const [weather, setWeather] = useState<WeatherData | null>(null)
-  const [recommendations, setRecommendations] = useState<ReturnType<typeof recommendOutfits>>([])
+  const [recommendations, setRecommendations] = useState<OutfitSuggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingRecommendations, setLoadingRecommendations] = useState(false)
   const [showLocationModal, setShowLocationModal] = useState(false)
@@ -96,10 +96,10 @@ export default function RecommendationsPage() {
   }, [isSupabaseConfigured, userProfile])
 
   // Memoizar generateRecommendations
-  const generateRecommendations = useCallback(() => {
+  const generateRecommendations = useCallback(async () => {
     setLoadingRecommendations(true)
     try {
-      const recs = recommendOutfits(garments, weather, userProfile?.id)
+      const recs = await recommendOutfits(garments, weather, userProfile?.id)
       setRecommendations(recs)
     } catch (error) {
       console.error('Error generating recommendations:', error)
@@ -107,15 +107,6 @@ export default function RecommendationsPage() {
       setLoadingRecommendations(false)
     }
   }, [garments, weather, userProfile])
-
-  useEffect(() => {
-    if (garments.length > 0 && weather) {
-      generateRecommendations()
-    } else if (garments.length > 0 && !weather && userProfile?.city) {
-      // Intentar obtener clima si aún no se tiene (no bloqueante)
-      getWeatherByCity(userProfile.city).then(setWeather).catch(console.error)
-    }
-  }, [garments, weather, userProfile, generateRecommendations])
 
   useEffect(() => {
     if (!authLoading && userProfile) {
