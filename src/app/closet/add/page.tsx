@@ -143,33 +143,44 @@ export default function AddGarmentPage() {
     }
 
     try {
-      // OPTIMIZACIÓN: Obtener cajas y conteos en paralelo
-      const [boxesResult, garmentsResult] = await Promise.all([
-        supabase
-          .from('boxes')
-          .select('*')
-          .order('name'),
-        supabase
-          .from('garments')
-          .select('box_id')
-          .eq('status', 'available')
-          .not('box_id', 'is', null)
-      ])
+      // Obtener todas las cajas
+      const { data, error } = await supabase
+        .from('boxes')
+        .select('*')
+        .order('name')
 
-      if (boxesResult.error) throw boxesResult.error
+      if (error) throw error
 
-      // Crear mapa de conteos desde la consulta optimizada
-      const countMap = new Map<string, number>()
-      if (garmentsResult.data) {
-        garmentsResult.data.forEach((item: any) => {
-          if (item.box_id) {
-            countMap.set(item.box_id, (countMap.get(item.box_id) || 0) + 1)
-          }
-        })
+      // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
+      // en lugar de traer TODOS los box_id (puede ser miles de registros)
+      const boxIds = (data || []).map((box: { id: string; name: string }) => box.id)
+      
+      // Si no hay cajas, retornar vacío
+      if (boxIds.length === 0) {
+        setBoxes([])
+        return
       }
 
+      // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
+      // Esto es MUCHO más eficiente que traer todos los registros
+      const countQueries = boxIds.map((boxId: string) =>
+        supabase
+          .from('garments')
+          .select('*', { count: 'exact', head: true })
+          .eq('box_id', boxId)
+          .eq('status', 'available')
+      )
+
+      const countResults = await Promise.all(countQueries)
+
+      // Crear mapa de conteos
+      const countMap = new Map<string, number>()
+      boxIds.forEach((boxId: string, index: number) => {
+        countMap.set(boxId, countResults[index].count || 0)
+      })
+
       // Combinar datos con conteos
-      const boxesWithCount = (boxesResult.data || []).map((box: any) => ({
+      const boxesWithCount = (data || []).map((box: any) => ({
         ...box,
         garment_count: countMap.get(box.id) || 0
       }))
