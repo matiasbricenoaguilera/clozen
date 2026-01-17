@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
-import { Loader2, AlertCircle, Save } from 'lucide-react'
+import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
 const GARMENT_TYPES = [
@@ -61,6 +61,7 @@ export function EditGarmentModal({
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
   const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
   const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
@@ -433,6 +434,100 @@ export function EditGarmentModal({
     }
   }
 
+  // ✅ AGREGAR: Función para eliminar prenda (solo admin)
+  const handleDelete = async () => {
+    if (!garment || !userProfile) return
+
+    // Confirmación doble para acciones destructivas
+    const confirmed = confirm(
+      `¿Estás seguro de eliminar la prenda "${garment.name}"?\n\n` +
+      `Esta acción eliminará:\n` +
+      `- La prenda del sistema\n` +
+      `- Su historial de uso\n` +
+      `- Su imagen (si existe)\n` +
+      `- Su tag NFC (si existe)\n\n` +
+      `Esta acción NO se puede deshacer.`
+    )
+
+    if (!confirmed) return
+
+    setDeleting(true)
+    setError('')
+
+    try {
+      // 1. Obtener información de la prenda antes de eliminar
+      const { data: garmentData } = await supabase
+        .from('garments')
+        .select('image_url, nfc_tag_id, barcode_id, user_id')
+        .eq('id', garment.id)
+        .single()
+
+      // 2. Eliminar imagen del Storage si existe
+      if (garmentData?.image_url) {
+        try {
+          // Extraer el path del URL completo
+          const urlParts = garmentData.image_url.split('/')
+          const fileName = urlParts[urlParts.length - 1]
+          const userFolder = urlParts[urlParts.length - 2]
+          const filePath = `garments/${userFolder}/${fileName}`
+
+          const { error: storageError } = await supabase.storage
+            .from('garments')
+            .remove([filePath])
+
+          if (storageError) {
+            console.warn('⚠️ Error eliminando imagen del Storage:', storageError)
+            // No lanzar error, continuar con la eliminación
+          } else {
+            console.log('✅ Imagen eliminada del Storage:', filePath)
+          }
+        } catch (storageErr) {
+          console.warn('⚠️ Error al procesar eliminación de imagen:', storageErr)
+          // Continuar con la eliminación aunque falle la imagen
+        }
+      }
+
+      // 3. Eliminar registro de nfc_tags si existe
+      if (garmentData?.nfc_tag_id) {
+        try {
+          const { error: nfcError } = await supabase
+            .from('nfc_tags')
+            .delete()
+            .eq('tag_id', garmentData.nfc_tag_id)
+            .eq('entity_type', 'garment')
+
+          if (nfcError) {
+            console.warn('⚠️ Error eliminando NFC tag:', nfcError)
+            // No lanzar error, continuar con la eliminación
+          } else {
+            console.log('✅ Tag NFC eliminado:', garmentData.nfc_tag_id)
+          }
+        } catch (nfcErr) {
+          console.warn('⚠️ Error al procesar eliminación de NFC tag:', nfcErr)
+        }
+      }
+
+      // 4. Eliminar la prenda (esto elimina automáticamente usage_history por CASCADE)
+      const { error: deleteError } = await supabase
+        .from('garments')
+        .delete()
+        .eq('id', garment.id)
+
+      if (deleteError) throw deleteError
+
+      console.log('✅ Prenda eliminada exitosamente:', garment.id)
+
+      // Cerrar modal y recargar datos
+      onOpenChange(false)
+      onSuccess()
+    } catch (error: any) {
+      console.error('❌ Error eliminando prenda:', error)
+      setError(error.message || 'Error al eliminar la prenda')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (!garment) return null
 
   return (
@@ -614,15 +709,36 @@ export function EditGarmentModal({
           </div>
 
           <DialogFooter>
+            {userProfile?.role === 'admin' && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={saving || deleting}
+                className="mr-auto"
+              >
+                {deleting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Eliminando...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Eliminar Prenda
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={saving}
+              disabled={saving || deleting}
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || deleting}>
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
