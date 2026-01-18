@@ -137,6 +137,29 @@ export function useNFC() {
     }
   }, [])
 
+  // Generar nuevo ID único para tag NFC
+  const generateNewTagId = useCallback(() => {
+    // Generar ID tipo MAC basado en timestamp y random
+    const timestamp = Date.now()
+    const random = Math.floor(Math.random() * 0xFFFFFF)
+
+    const macBytes = [
+      (timestamp >> 40) & 0xFF,
+      (timestamp >> 32) & 0xFF,
+      (timestamp >> 24) & 0xFF,
+      (timestamp >> 16) & 0xFF,
+      (timestamp >> 8) & 0xFF,
+      timestamp & 0xFF
+    ]
+
+    // Mezclar con random para mayor unicidad
+    macBytes[3] = (macBytes[3] ^ (random >> 16)) & 0xFF
+    macBytes[4] = (macBytes[4] ^ (random >> 8)) & 0xFF
+    macBytes[5] = (macBytes[5] ^ random) & 0xFF
+
+    return macBytes.map(b => b.toString(16).padStart(2, '0')).join(':').toUpperCase()
+  }, [])
+
   // Leer tag NFC
   const readNFCTag = useCallback(async (skipExistenceCheck: boolean = false): Promise<NFCReadResult> => {
     // #region agent log
@@ -345,29 +368,6 @@ export function useNFC() {
       setIsReading(false)
     }
   }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId])
-
-  // Generar nuevo ID único para tag NFC
-  const generateNewTagId = useCallback(() => {
-    // Generar ID tipo MAC basado en timestamp y random
-    const timestamp = Date.now()
-    const random = Math.floor(Math.random() * 0xFFFFFF)
-
-    const macBytes = [
-      (timestamp >> 40) & 0xFF,
-      (timestamp >> 32) & 0xFF,
-      (timestamp >> 24) & 0xFF,
-      (timestamp >> 16) & 0xFF,
-      (timestamp >> 8) & 0xFF,
-      timestamp & 0xFF
-    ]
-
-    // Mezclar con random para mayor unicidad
-    macBytes[3] = (macBytes[3] ^ (random >> 16)) & 0xFF
-    macBytes[4] = (macBytes[4] ^ (random >> 8)) & 0xFF
-    macBytes[5] = (macBytes[5] ^ random) & 0xFF
-
-    return macBytes.map(b => b.toString(16).padStart(2, '0')).join(':').toUpperCase()
-  }, [])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
