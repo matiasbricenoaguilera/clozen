@@ -148,9 +148,13 @@ export function useNFC() {
 
     setIsReading(true)
 
+    // ✅ Guardar referencia al NDEFReader para poder detenerlo
+    let ndef: any = null
+    let timeoutId: NodeJS.Timeout | null = null
+
     try {
       // @ts-ignore - Web NFC API types
-      const ndef = new NDEFReader()
+      ndef = new NDEFReader()
 
       await ndef.scan()
 
@@ -180,6 +184,9 @@ export function useNFC() {
             }
 
             if (!tagId) {
+              // ✅ Detener el NDEFReader antes de resolver
+              try { ndef?.stop() } catch {}
+              if (timeoutId) clearTimeout(timeoutId)
               resolve({
                 success: false,
                 error: 'No se pudo leer el ID del tag'
@@ -192,6 +199,9 @@ export function useNFC() {
             if (!skipExistenceCheck) {
               const tagCheck = await checkTagExists(tagId)
               if (tagCheck.exists) {
+                // ✅ Detener el NDEFReader antes de resolver
+                try { ndef?.stop() } catch {}
+                if (timeoutId) clearTimeout(timeoutId)
                 resolve({
                   success: false,
                   error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
@@ -200,11 +210,18 @@ export function useNFC() {
               }
             }
 
+            // ✅ Detener el NDEFReader después de leer exitosamente
+            try { ndef?.stop() } catch {}
+            if (timeoutId) clearTimeout(timeoutId)
+            
             resolve({
               success: true,
               tagId: tagId
             })
           } catch (error) {
+            // ✅ Detener el NDEFReader en caso de error
+            try { ndef?.stop() } catch {}
+            if (timeoutId) clearTimeout(timeoutId)
             resolve({
               success: false,
               error: 'Error al procesar el tag NFC'
@@ -213,6 +230,9 @@ export function useNFC() {
         }
 
         ndef.onreadingerror = () => {
+          // ✅ Detener el NDEFReader en caso de error de lectura
+          try { ndef?.stop() } catch {}
+          if (timeoutId) clearTimeout(timeoutId)
           resolve({
             success: false,
             error: 'Error al leer el tag NFC'
@@ -220,8 +240,8 @@ export function useNFC() {
         }
 
         // Timeout después de 30 segundos
-        setTimeout(() => {
-          ndef.stop()
+        timeoutId = setTimeout(() => {
+          try { ndef?.stop() } catch {}
           resolve({
             success: false,
             error: 'Tiempo de espera agotado'
@@ -229,6 +249,9 @@ export function useNFC() {
         }, 30000)
       })
     } catch (error) {
+      // ✅ Detener el NDEFReader si hay error al iniciar
+      try { ndef?.stop() } catch {}
+      if (timeoutId) clearTimeout(timeoutId)
       return {
         success: false,
         error: 'Error al iniciar la lectura NFC'
