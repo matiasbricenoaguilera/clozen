@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Si no hay ID válido, se genera y se informa que se está creando un nuevo código
 - **Sobrescritura NDEF en tags nuevos**: Al escribir un tag nuevo se reemplaza el contenido previo con un solo registro UTF‑8
 - **Aviso de tag solo lectura**: Se muestra un error claro si el tag no permite escritura
+- **Nueva sección Admin "Gestionar Tag"**: Herramienta para escanear, liberar y reescribir tags NFC desde el panel administrativo
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado
