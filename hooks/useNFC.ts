@@ -147,6 +147,14 @@ export function useNFC() {
     return /^[0-9A-F]{8,}$/.test(value)
   }, [])
 
+  const normalizeUtf8Id = useCallback((value: string) => {
+    return value.trim()
+  }, [])
+
+  const isValidUtf8Id = useCallback((value: string) => {
+    return value.trim().length > 0
+  }, [])
+
   const toHexString = useCallback((data: ArrayBuffer | DataView | Uint8Array) => {
     const bytes = data instanceof Uint8Array
       ? data
@@ -316,7 +324,11 @@ export function useNFC() {
               }
             }
 
-            const normalizedRecords = ndefRecords
+            const utf8Records = ndefRecords
+              .map((record) => normalizeUtf8Id(record))
+              .filter((record) => isValidUtf8Id(record))
+
+            const hexRecords = ndefHexRecords
               .map((record) => normalizeNfcId(record))
               .filter((record) => isValidNfcId(record))
 
@@ -327,7 +339,8 @@ export function useNFC() {
               hasSerialNumber: !!event.serialNumber,
               serialNumber: event.serialNumber,
               ndefRecords,
-              normalizedRecords,
+              utf8Records,
+              hexRecords,
               eventKeys: Object.keys(event)
             })
 
@@ -344,20 +357,27 @@ export function useNFC() {
               console.log('✅ Usando serial number:', tagId)
             }
 
-            // ✅ PRIORIDAD 2: Usar registro 1 válido (UTF-8)
-            if (!tagId && normalizedRecords[0]) {
-              tagId = normalizedRecords[0]
-              console.log('✅ Usando registro 1 válido:', tagId)
+            // ✅ PRIORIDAD 2: Usar registro 1 UTF-8
+            if (!tagId && utf8Records[0]) {
+              tagId = utf8Records[0]
+              console.log('✅ Usando UTF-8 registro 1:', tagId)
             }
 
-            // ✅ Si hay duplicado en registro 1, usar registro 2 e informar
+            // ✅ Si hay duplicado en UTF-8 registro 1, usar UTF-8 registro 2
             if (!skipExistenceCheck && tagId) {
               const tagCheck = await checkTagExists(tagId)
-              if (tagCheck.exists && normalizedRecords[1]) {
-                tagId = normalizedRecords[1]
-                infoMessage = 'Duplicado en registro 1, leyendo registro 2.'
-                console.log('⚠️ Registro 1 duplicado, usando registro 2:', tagId)
+              if (tagCheck.exists && utf8Records[1]) {
+                tagId = utf8Records[1]
+                infoMessage = 'Duplicado en UTF-8 registro 1, leyendo registro 2.'
+                console.log('⚠️ UTF-8 registro 1 duplicado, usando registro 2:', tagId)
               }
+            }
+
+            // ✅ Respaldo: usar HEX si no hay UTF-8 válido
+            if (!tagId && hexRecords[0]) {
+              tagId = hexRecords[0]
+              infoMessage = 'UTF-8 no válido o repetido. Usando HEX como respaldo.'
+              console.log('⚠️ Usando HEX como respaldo:', tagId)
             }
 
             // ✅ Si NO hay serial ni registros válidos
@@ -474,7 +494,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage, toHexString])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage, toHexString, normalizeUtf8Id, isValidUtf8Id])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
