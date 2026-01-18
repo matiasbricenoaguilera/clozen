@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Verificación automática de escritura NFC**: Después de escribir, se vuelve a leer el tag y se valida que el ID quedó guardado
 - **Diagnóstico NDEF en Admin**: La sección Gestionar Tags ahora muestra registros NDEF en UTF‑8 y HEX para comparar valores
 - **Prioridad UTF-8 en lectura NFC**: Se usa primero el registro UTF‑8 (y luego el registro 2 si hay duplicado); HEX queda como respaldo
+- **Preferencia por UTF-8 no hex-like**: Se priorizan registros UTF‑8 que no parezcan hex para evitar repetir IDs
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado
