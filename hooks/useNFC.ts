@@ -139,6 +139,10 @@ export function useNFC() {
 
   // Leer tag NFC
   const readNFCTag = useCallback(async (skipExistenceCheck: boolean = false): Promise<NFCReadResult> => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:141',message:'readNFCTag called',data:{skipExistenceCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+
     if (!checkNFCSupport()) {
       return {
         success: false,
@@ -157,19 +161,53 @@ export function useNFC() {
       // @ts-ignore - Web NFC API types
       ndef = new NDEFReader()
 
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:157',message:'NDEFReader created, calling scan',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+
       await ndef.scan()
 
       return new Promise((resolve) => {
-        const resolveOnce = (result: NFCReadResult) => {
-          if (resolved) return // ✅ Prevenir múltiples resoluciones
+        const resolveOnce = (result: NFCReadResult, source: string) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:164',message:'resolveOnce called',data:{resolved,source,success:result.success,error:result.error?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+          // #endregion
+
+          if (resolved) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:169',message:'resolveOnce blocked - already resolved',data:{source},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            return // ✅ Prevenir múltiples resoluciones
+          }
           resolved = true
+          
+          // ✅ REMOVER listeners ANTES de detener para evitar que onreadingerror se dispare
+          try {
+            ndef.onreading = null
+            ndef.onreadingerror = null
+          } catch {}
+          
           // Limpiar antes de resolver
-          try { ndef?.stop() } catch {}
+          try { 
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:176',message:'Calling ndef.stop()',data:{source},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            ndef?.stop() 
+          } catch {}
           if (timeoutId) clearTimeout(timeoutId)
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:183',message:'Resolving promise',data:{source,success:result.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+
           resolve(result)
         }
 
         ndef.onreading = async (event: any) => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:199',message:'onreading event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+          // #endregion
+
           try {
             // Leer el contenido del tag
             const decoder = new TextDecoder()
@@ -197,7 +235,7 @@ export function useNFC() {
               resolveOnce({
                 success: false,
                 error: 'No se pudo leer el ID del tag'
-              })
+              }, 'onreading-no-tag-id')
               return
             }
 
@@ -209,7 +247,7 @@ export function useNFC() {
                 resolveOnce({
                   success: false,
                   error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
-                })
+                }, 'onreading-tag-exists')
                 return
               }
             }
@@ -218,29 +256,37 @@ export function useNFC() {
             resolveOnce({
               success: true,
               tagId: tagId
-            })
+            }, 'onreading-success')
           } catch (error) {
             resolveOnce({
               success: false,
               error: 'Error al procesar el tag NFC'
-            })
+            }, 'onreading-catch')
           }
         }
 
         ndef.onreadingerror = () => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:257',message:'onreadingerror event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          // #endregion
+
           // ✅ Solo resolver si aún no se ha resuelto (evita que stop() dispare este error)
           resolveOnce({
             success: false,
             error: 'Error al leer el tag NFC'
-          })
+          }, 'onreadingerror')
         }
 
         // Timeout después de 30 segundos
         timeoutId = setTimeout(() => {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:265',message:'Timeout fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+          // #endregion
+
           resolveOnce({
             success: false,
             error: 'Tiempo de espera agotado'
-          })
+          }, 'timeout')
         }, 30000)
       })
     } catch (error) {
