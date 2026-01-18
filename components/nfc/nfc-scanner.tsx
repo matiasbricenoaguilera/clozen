@@ -36,6 +36,7 @@ export function NFCScanner({
   const [supportInfo, setSupportInfo] = useState<any>(null)
   const isScanningRef = useRef(false) // Prevenir múltiples escaneos simultáneos
   const autoStartedRef = useRef(false) // Prevenir inicio automático múltiple
+  const lastSuccessTimeRef = useRef<number>(0) // Rastrear tiempo del último éxito para ignorar errores falsos
 
   useEffect(() => {
     // Obtener información detallada al montar
@@ -66,6 +67,7 @@ export function NFCScanner({
         if (result.success && result.tagId) {
           setDetectedTagId(result.tagId)
           onSuccess(result.tagId)
+          lastSuccessTimeRef.current = Date.now() // ✅ Registrar tiempo del éxito
           
           // ✅ Si está en modo continuo, automáticamente reiniciar escaneo
           if (continuous) {
@@ -81,12 +83,22 @@ export function NFCScanner({
             setStatus('success')
           }
         } else {
-          // ✅ En modo continuo, también reiniciar el escaneo después de un error
-          if (continuous) {
-            // Mostrar el error brevemente, luego continuar escaneando
+          // ✅ Solo llamar onError si no hubo un éxito muy reciente (< 200ms)
+          const timeSinceLastSuccess = Date.now() - lastSuccessTimeRef.current
+          const isRecentSuccess = timeSinceLastSuccess < 200
+          
+          if (isRecentSuccess) {
+            // Ignorar el error si fue muy reciente (probablemente falso positivo de stop())
+            console.log('⚠️ Error ignorado - muy reciente después de éxito:', result.error)
+          } else {
+            // Es un error real, mostrar y manejar normalmente
             setErrorMessage(result.error || 'Error desconocido')
             setStatus('error')
             onError?.(result.error || 'Error desconocido')
+          }
+          
+          // ✅ En modo continuo, también reiniciar el escaneo después de un error
+          if (continuous) {
             // Reiniciar después de un breve momento
             setTimeout(() => {
               isScanningRef.current = false
@@ -94,12 +106,10 @@ export function NFCScanner({
               setErrorMessage('')
               setDetectedTagId('')
               handleStartScan()
-            }, 1000) // Un poco más de tiempo para errores
-          } else {
+            }, isRecentSuccess ? 1000 : 1000) // Mismo tiempo para ambos casos
+          } else if (!isRecentSuccess) {
+            // Solo mostrar error si no es reciente
             isScanningRef.current = false
-            setErrorMessage(result.error || 'Error desconocido')
-            setStatus('error')
-            onError?.(result.error || 'Error desconocido')
           }
         }
       } else if (mode === 'write' && expectedTagId) {
