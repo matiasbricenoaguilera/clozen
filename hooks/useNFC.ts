@@ -214,29 +214,63 @@ export function useNFC() {
             // Leer el contenido del tag
             const decoder = new TextDecoder()
             let tagId = ''
+            let ndefContent = '' // Guardar contenido NDEF para fallback
 
-            // Primero intentar leer contenido NDEF
+            // Leer contenido NDEF primero (guardarlo para fallback si es necesario)
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                tagId = decoder.decode(record.data)
+                ndefContent = decoder.decode(record.data)
                 break
               }
             }
 
-            // Si no hay contenido NDEF, usar el serial number como base
-            if (!tagId && event.serialNumber) {
+            // ✅ PRIORIDAD 1: Usar serial number si está disponible (más único y confiable)
+            if (event.serialNumber) {
+              // Intentar convertir a formato MAC (más legible)
               tagId = generateMacLikeId(event.serialNumber)
+              
+              // Si la conversión falla, usar serial number directo
+              if (!tagId) {
+                tagId = event.serialNumber
+              }
             }
 
-            // Si aún no hay ID, generar uno basado solo en serial
-            if (!tagId && event.serialNumber) {
-              tagId = event.serialNumber
+            // ✅ PRIORIDAD 2: Fallback a contenido NDEF (para tags antiguos sin serial number)
+            if (!tagId && ndefContent) {
+              tagId = ndefContent
+            }
+
+            // ✅ PRIORIDAD 3: Si aún no hay ID, generar uno y escribirlo en el tag
+            if (!tagId) {
+              // Generar nuevo ID único
+              const newTagId = generateNewTagId()
+              tagId = newTagId
+              
+              // Escribir el ID en el tag NFC (usando el mismo reader activo)
+              try {
+                const encoder = new TextEncoder()
+                const message = {
+                  records: [
+                    {
+                      recordType: 'text',
+                      data: encoder.encode(newTagId)
+                    }
+                  ]
+                }
+                
+                // @ts-ignore - Web NFC API types
+                await ndef.write(message)
+                console.log('✅ ID generado y escrito en tag NFC:', newTagId)
+              } catch (writeError) {
+                console.warn('⚠️ No se pudo escribir ID en tag, pero se usará el ID generado:', newTagId, writeError)
+                // Continuar con el ID generado aunque falle la escritura
+              }
             }
 
             if (!tagId) {
               resolveOnce({
                 success: false,
-                error: 'No se pudo leer el ID del tag'
+                error: 'No se pudo leer o generar el ID del tag'
               }, 'onreading-no-tag-id')
               return
             }
@@ -310,7 +344,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId])
 
   // Generar nuevo ID único para tag NFC
   const generateNewTagId = useCallback(() => {
