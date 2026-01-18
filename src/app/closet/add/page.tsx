@@ -81,6 +81,7 @@ export default function AddGarmentPage() {
   const [selectedNfcTag, setSelectedNfcTag] = useState<string>('')
   const [manualNfcCode, setManualNfcCode] = useState<string>('')
   const [barcodeCode, setBarcodeCode] = useState<string>('')
+  const [writeNfcTagId, setWriteNfcTagId] = useState<string>('')
   const [associatingNfc, setAssociatingNfc] = useState(false) // Estado para feedback visual NFC
   const [accessDenied, setAccessDenied] = useState(false) // Estado para acceso denegado
   const [users, setUsers] = useState<Array<{ id: string; email: string; full_name: string | null }>>([])
@@ -96,6 +97,31 @@ export default function AddGarmentPage() {
     boxId: '',
     image: undefined
   })
+
+  const generateWriteNfcId = useCallback(() => {
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID().replace(/-/g, '').toUpperCase()
+      }
+    } catch {}
+
+    const timestamp = Date.now().toString(16)
+    const random = Math.floor(Math.random() * 0xFFFFFFFFFFFF).toString(16)
+    return `${timestamp}${random}`.toUpperCase()
+  }, [])
+
+  useEffect(() => {
+    if (nfcMode === 'write') {
+      if (!writeNfcTagId) {
+        setWriteNfcTagId(generateWriteNfcId())
+      }
+      return
+    }
+
+    if (writeNfcTagId) {
+      setWriteNfcTagId('')
+    }
+  }, [nfcMode, writeNfcTagId, generateWriteNfcId])
 
   useEffect(() => {
     // Si Supabase no está configurado, permitir (modo demo)
@@ -1323,7 +1349,7 @@ export default function AddGarmentPage() {
                     mode={nfcMode}
                     onSuccess={handleNFCRead}
                     onError={handleNFCError}
-                    expectedTagId={nfcMode === 'write' ? '' : undefined}
+                    expectedTagId={nfcMode === 'write' ? writeNfcTagId : undefined}
                     title={nfcMode === 'read' ? 'Escanear Tag Existente' : 'Crear Nuevo Tag'}
                     description={
                       nfcMode === 'read'
