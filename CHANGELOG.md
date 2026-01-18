@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Priorización de serial number en lectura NFC**: Cambiada la lógica de identificación de tags NFC para priorizar el número de serie del chip
+  - Prioridad 1: Usar serial number del chip NFC (convertido a formato MAC para legibilidad)
+  - Prioridad 2: Fallback a contenido NDEF escrito en el tag (compatibilidad con tags antiguos)
+  - Prioridad 3: Generar ID único automáticamente y escribirlo en el tag si no hay serial ni NDEF
+  - Los tags ya registrados con contenido NDEF siguen funcionando correctamente
+  - Tags nuevos sin serial number ni contenido NDEF se auto-identifican escribiendo un ID único
+  - Mejora significativa en la unicidad de identificación basada en hardware del chip
+
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado
   - Validación automática con debounce de 500ms al ingresar códigos
