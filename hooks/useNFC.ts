@@ -42,7 +42,7 @@ export function useNFC() {
   useEffect(() => {
     // Verificar soporte cuando el componente se monta
     checkNFCSupport()
-  }, [checkNFCSupport])
+  }, [checkNFCSupport, buildSingleTextMessage])
 
   // ✅ MEJORAR: Agregar función para obtener información detallada de compatibilidad
   const getNFCSupportInfo = useCallback(() => {
@@ -145,6 +145,19 @@ export function useNFC() {
   // Validar ID NFC: hexadecimal largo (>= 8 chars, sin separadores)
   const isValidNfcId = useCallback((value: string) => {
     return /^[0-9A-F]{8,}$/.test(value)
+  }, [])
+
+  // Construir mensaje NDEF con un solo registro UTF-8
+  const buildSingleTextMessage = useCallback((value: string) => {
+    const encoder = new TextEncoder()
+    return {
+      records: [
+        {
+          recordType: 'text',
+          data: encoder.encode(value)
+        }
+      ]
+    }
   }, [])
 
   // Generar nuevo ID único para tag NFC (UUID v4 sin guiones)
@@ -309,15 +322,7 @@ export function useNFC() {
               console.log('⚠️ Tag sin ID válido, generando y escribiendo ID único:', newTagId)
 
               try {
-                const encoder = new TextEncoder()
-                const message = {
-                  records: [
-                    {
-                      recordType: 'text',
-                      data: encoder.encode(newTagId)
-                    }
-                  ]
-                }
+                const message = buildSingleTextMessage(newTagId)
 
                 // @ts-ignore - Web NFC API types
                 await ndef.write(message)
@@ -405,7 +410,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
@@ -422,16 +427,8 @@ export function useNFC() {
       // @ts-ignore - Web NFC API types
       const ndef = new NDEFReader()
 
-      // Crear mensaje NDEF con el ID
-      const encoder = new TextEncoder()
-      const message = {
-        records: [
-          {
-            recordType: 'text',
-            data: encoder.encode(tagId)
-          }
-        ]
-      }
+      // Crear mensaje NDEF con un solo registro UTF-8 (sobrescribe el contenido anterior)
+      const message = buildSingleTextMessage(tagId)
 
       await ndef.scan()
 
