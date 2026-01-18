@@ -83,6 +83,7 @@ export interface NFCReadResult {
   tagId?: string
   success: boolean
   error?: string
+  info?: string
 }
 
 export interface NFCWriteResult {

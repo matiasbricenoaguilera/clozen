@@ -239,23 +239,26 @@ export function useNFC() {
             const decoder = new TextDecoder()
             let tagId = ''
 
-            // Leer contenido NDEF (se usa solo si es un ID válido)
-            let ndefContent = ''
+            // Leer registros NDEF de texto (UTF-8)
+            const ndefRecords: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                ndefContent = decoder.decode(record.data)
-                break
+                ndefRecords.push(decoder.decode(record.data))
               }
             }
 
-            const normalizedNdef = ndefContent ? normalizeNfcId(ndefContent) : ''
+            const normalizedRecords = ndefRecords
+              .map((record) => normalizeNfcId(record))
+              .filter((record) => isValidNfcId(record))
+
+            let infoMessage = ''
 
             // ✅ DEBUG: Log para ver qué información está disponible
             console.log('🔍 NFC Event Info:', {
               hasSerialNumber: !!event.serialNumber,
               serialNumber: event.serialNumber,
-              ndefContent: ndefContent,
-              normalizedNdef,
+              ndefRecords,
+              normalizedRecords,
               eventKeys: Object.keys(event)
             })
 
@@ -272,13 +275,23 @@ export function useNFC() {
               console.log('✅ Usando serial number:', tagId)
             }
 
-            // ✅ PRIORIDAD 2: Usar NDEF solo si es un ID válido (hexadecimal largo)
-            if (!tagId && normalizedNdef && isValidNfcId(normalizedNdef)) {
-              tagId = normalizedNdef
-              console.log('✅ Usando ID válido desde NDEF:', tagId)
+            // ✅ PRIORIDAD 2: Usar registro 1 válido (UTF-8)
+            if (!tagId && normalizedRecords[0]) {
+              tagId = normalizedRecords[0]
+              console.log('✅ Usando registro 1 válido:', tagId)
             }
 
-            // ✅ Si NO hay serial ni ID válido en NDEF
+            // ✅ Si hay duplicado en registro 1, usar registro 2 e informar
+            if (!skipExistenceCheck && tagId) {
+              const tagCheck = await checkTagExists(tagId)
+              if (tagCheck.exists && normalizedRecords[1]) {
+                tagId = normalizedRecords[1]
+                infoMessage = 'Duplicado en registro 1, leyendo registro 2.'
+                console.log('⚠️ Registro 1 duplicado, usando registro 2:', tagId)
+              }
+            }
+
+            // ✅ Si NO hay serial ni registros válidos
             if (!tagId) {
               if (skipExistenceCheck) {
                 resolveOnce({
@@ -291,6 +304,7 @@ export function useNFC() {
               // Generar nuevo ID único y escribirlo en el tag
               const newTagId = generateNewTagId()
               tagId = newTagId
+              infoMessage = 'No hay ID válido. Generando y escribiendo nuevo código.'
 
               console.log('⚠️ Tag sin ID válido, generando y escribiendo ID único:', newTagId)
 
@@ -326,47 +340,19 @@ export function useNFC() {
             if (!skipExistenceCheck) {
               const tagCheck = await checkTagExists(tagId)
               if (tagCheck.exists) {
-                // Si el ID viene del NDEF (no del serial), reescribir con un ID nuevo para evitar duplicados
-                if (!event.serialNumber) {
-                  const newTagId = generateNewTagId()
-                  tagId = newTagId
-
-                  console.log('⚠️ ID NFC duplicado, reescribiendo con nuevo ID:', newTagId)
-
-                  try {
-                    const encoder = new TextEncoder()
-                    const message = {
-                      records: [
-                        {
-                          recordType: 'text',
-                          data: encoder.encode(newTagId)
-                        }
-                      ]
-                    }
-
-                    // @ts-ignore - Web NFC API types
-                    await ndef.write(message)
-                  } catch (writeError) {
-                    resolveOnce({
-                      success: false,
-                      error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
-                    }, 'onreading-tag-exists')
-                    return
-                  }
-                } else {
-                  resolveOnce({
-                    success: false,
-                    error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
-                  }, 'onreading-tag-exists')
-                  return
-                }
+                resolveOnce({
+                  success: false,
+                  error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
+                }, 'onreading-tag-exists')
+                return
               }
             }
 
             // ✅ Resolver con éxito (esto detendrá el NDEFReader, pero con la flag no se resolverá de nuevo)
             resolveOnce({
               success: true,
-              tagId: tagId
+              tagId: tagId,
+              info: infoMessage
             }, 'onreading-success')
           } catch (error) {
             resolveOnce({
