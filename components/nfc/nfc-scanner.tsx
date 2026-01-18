@@ -68,9 +68,7 @@ export function NFCScanner({
         const result = await readNFCTag(skipExistenceCheck)
         if (result.success && result.tagId) {
           setDetectedTagId(result.tagId)
-          if (mode === 'write') {
-            setInfoMessage('NDEF sobrescrito con un único registro UTF‑8.')
-          } else if (result.info) {
+          if (result.info) {
             setInfoMessage(result.info)
           }
           onSuccess(result.tagId)
@@ -126,6 +124,7 @@ export function NFCScanner({
         isScanningRef.current = false
         if (result.success) {
           setStatus('success')
+          setInfoMessage('NDEF sobrescrito con un único registro UTF‑8.')
           onSuccess(expectedTagId)
         } else {
           setErrorMessage(result.error || 'Error desconocido')
