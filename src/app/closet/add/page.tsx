@@ -17,8 +17,44 @@ import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
 import type { Box, GarmentForm } from '@/types'
 
 const GARMENT_TYPES = [
-  'camisa', 'pantalon', 'vestido', 'falda', 'chaqueta', 'abrigo',
-  'zapatos', 'accesorios', 'ropa interior', 'pijama', 'deportiva'
+  // Superior
+  'camisa',
+  'polera',
+  'camiseta',
+  'blusa',
+  'sweater',
+  'suéter',
+  'polerón',
+  'chaqueta',
+  'abrigo',
+  'chaleco',
+  'jersey',
+  // Inferior
+  'pantalon',
+  'pantalón corto',
+  'bermuda',
+  'falda',
+  'vestido',
+  // Ropa interior y playa
+  'ropa interior',
+  'traje de baño',
+  'bikini',
+  // Deportiva
+  'deportiva',
+  'ropa deportiva',
+  // Calzado
+  'zapatos',
+  'zapatillas',
+  'botas',
+  'sandalias',
+  // Accesorios
+  'accesorios',
+  'bolso',
+  'cinturón',
+  // Ropa de casa
+  'pijama',
+  'bata',
+  'ropa de casa'
 ]
 
 const SEASONS = [
