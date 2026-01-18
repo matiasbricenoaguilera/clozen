@@ -256,52 +256,28 @@ export function useNFC() {
             })
 
             // ✅ PRIORIDAD ÚNICA: Solo usar serial number si está disponible
-            if (event.serialNumber) {
-              // Intentar convertir a formato MAC (más legible)
-              tagId = generateMacLikeId(event.serialNumber)
-              
-              // Si la conversión falla, usar serial number directo
-              if (!tagId) {
-                tagId = event.serialNumber
-              }
-              
-              console.log('✅ Usando serial number:', tagId)
+            if (!event.serialNumber) {
+              resolveOnce({
+                success: false,
+                error: 'Serial number no disponible en Web NFC. No se puede registrar este tag.'
+              }, 'onreading-no-serial')
+              return
             }
 
-            // ✅ Si NO hay serial number, generar ID único y escribirlo en el tag
-            // NO usar NDEF como identificador para evitar duplicados
+            // Intentar convertir a formato MAC (más legible)
+            tagId = generateMacLikeId(event.serialNumber)
+
+            // Si la conversión falla, usar serial number directo
             if (!tagId) {
-              // Generar nuevo ID único (timestamp + random para máxima unicidad)
-              const newTagId = generateNewTagId()
-              tagId = newTagId
-              
-              console.log('⚠️ Serial number no disponible, generando ID único:', newTagId)
-              
-              // Escribir el ID único en el tag NFC
-              try {
-                const encoder = new TextEncoder()
-                const message = {
-                  records: [
-                    {
-                      recordType: 'text',
-                      data: encoder.encode(newTagId)
-                    }
-                  ]
-                }
-                
-                // @ts-ignore - Web NFC API types
-                await ndef.write(message)
-                console.log('✅ ID único escrito en tag NFC:', newTagId)
-              } catch (writeError) {
-                console.warn('⚠️ No se pudo escribir ID en tag, pero se usará el ID generado:', newTagId, writeError)
-                // Continuar con el ID generado aunque falle la escritura
-              }
+              tagId = event.serialNumber
             }
+
+            console.log('✅ Usando serial number:', tagId)
 
             if (!tagId) {
               resolveOnce({
                 success: false,
-                error: 'No se pudo leer serial number o generar ID único del tag'
+                error: 'No se pudo leer el serial number del tag'
               }, 'onreading-no-tag-id')
               return
             }

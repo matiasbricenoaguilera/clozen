@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Validación estricta de serial number en lectura NFC**: Ahora solo se acepta `serialNumber` como identificador válido
+  - Si el navegador no expone `serialNumber`, se rechaza el tag con un error claro
+  - Evita el uso de contenido NDEF como ID para prevenir duplicados
+  - Soluciona casos donde distintos tags compartían el mismo NDEF
 - **Priorización de serial number en lectura NFC**: Cambiada la lógica de identificación de tags NFC para priorizar el número de serie del chip
   - Prioridad 1: Usar serial number del chip NFC (convertido a formato MAC para legibilidad)
   - Prioridad 2: Fallback a contenido NDEF escrito en el tag (compatibilidad con tags antiguos)
