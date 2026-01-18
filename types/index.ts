@@ -84,6 +84,9 @@ export interface NFCReadResult {
   success: boolean
   error?: string
   info?: string
+  ndefTextRecords?: string[]
+  ndefHexRecords?: string[]
+  ndefRecordCount?: number
 }
 
 export interface NFCWriteResult {

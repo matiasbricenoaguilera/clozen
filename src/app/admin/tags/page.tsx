@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { findEntityByNFCTag, removeEntityNFCTag } from '@/utils/nfc'
+import type { NFCReadResult } from '@/types'
 
 type TagAssociation = {
   tagId: string
@@ -20,6 +21,7 @@ export default function AdminTagsPage() {
   const [writeTagId, setWriteTagId] = useState('')
   const [scannedTagId, setScannedTagId] = useState('')
   const [association, setAssociation] = useState<TagAssociation | null>(null)
+  const [ndefRecords, setNdefRecords] = useState<NFCReadResult | null>(null)
   const [info, setInfo] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -56,6 +58,10 @@ export default function AdminTagsPage() {
     }
   }, [])
 
+  const handleReadDetails = useCallback((result: NFCReadResult) => {
+    setNdefRecords(result)
+  }, [])
+
   const handleWrite = useCallback((tagId: string) => {
     setError('')
     setInfo('Tag sobrescrito con un único registro UTF‑8. Ahora está listo para asociarse.')
@@ -72,6 +78,7 @@ export default function AdminTagsPage() {
     setInfo('')
     setAssociation(null)
     setScannedTagId('')
+    setNdefRecords(null)
     setWriteTagId(generateWriteTagId())
     setMode('write')
   }, [generateWriteTagId])
@@ -79,6 +86,7 @@ export default function AdminTagsPage() {
   const handleStartRead = useCallback(() => {
     setError('')
     setInfo('')
+    setNdefRecords(null)
     setMode('read')
   }, [])
 
@@ -141,6 +149,7 @@ export default function AdminTagsPage() {
               mode={mode}
               onSuccess={mode === 'read' ? handleScan : handleWrite}
               onError={handleError}
+              onReadDetails={mode === 'read' ? handleReadDetails : undefined}
               expectedTagId={mode === 'write' ? writeTagId : undefined}
               title={scannerTitle}
               description={scannerDescription}
@@ -175,6 +184,23 @@ export default function AdminTagsPage() {
               <Button onClick={handleClearAssociation} disabled={busy}>
                 {busy ? 'Liberando...' : 'Liberar tag'}
               </Button>
+            </div>
+          )}
+
+          {ndefRecords?.ndefTextRecords && ndefRecords.ndefTextRecords.length > 0 && (
+            <div className="space-y-2 rounded-lg border p-4">
+              <p className="font-medium">Registros NDEF detectados</p>
+              {ndefRecords.ndefTextRecords.map((record, index) => (
+                <div key={`ndef-${index}`} className="text-sm">
+                  <span className="font-medium">Registro {index + 1} (UTF‑8): </span>
+                  <Badge variant="secondary">{record || '(vacío)'}</Badge>
+                  {ndefRecords.ndefHexRecords?.[index] && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      HEX: {ndefRecords.ndefHexRecords[index]}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </CardContent>

@@ -147,6 +147,15 @@ export function useNFC() {
     return /^[0-9A-F]{8,}$/.test(value)
   }, [])
 
+  const toHexString = useCallback((data: ArrayBuffer | DataView | Uint8Array) => {
+    const bytes = data instanceof Uint8Array
+      ? data
+      : data instanceof DataView
+        ? new Uint8Array(data.buffer)
+        : new Uint8Array(data)
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join(':').toUpperCase()
+  }, [])
+
   // Construir mensaje NDEF con un solo registro UTF-8
   const buildSingleTextMessage = useCallback((value: string) => {
     const encoder = new TextEncoder()
@@ -299,9 +308,11 @@ export function useNFC() {
 
             // Leer registros NDEF de texto (UTF-8)
             const ndefRecords: string[] = []
+            const ndefHexRecords: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
                 ndefRecords.push(decoder.decode(record.data))
+                ndefHexRecords.push(toHexString(record.data))
               }
             }
 
@@ -407,7 +418,10 @@ export function useNFC() {
             resolveOnce({
               success: true,
               tagId: tagId,
-              info: infoMessage
+              info: infoMessage,
+              ndefTextRecords: ndefRecords,
+              ndefHexRecords: ndefHexRecords,
+              ndefRecordCount: ndefRecords.length
             }, 'onreading-success')
           } catch (error) {
             resolveOnce({
@@ -460,7 +474,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage, toHexString])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
