@@ -790,6 +790,7 @@ export default function AdminOrganizePage() {
                     title="Escanear Tag NFC"
                     description="Escaneo continuo: acércate tags NFC y se agregarán automáticamente al campo de texto"
                     continuous={true}
+                    skipExistenceCheck={true}
                   />
                   <Button 
                     onClick={() => { 

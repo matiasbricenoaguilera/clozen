@@ -16,6 +16,7 @@ interface NFCScannerProps {
   title?: string
   description?: string
   continuous?: boolean // Si es true, continúa escaneando después de cada lectura exitosa
+  skipExistenceCheck?: boolean // Si es true, omite la verificación de existencia del tag (útil para buscar prendas existentes)
 }
 
 export function NFCScanner({
@@ -25,7 +26,8 @@ export function NFCScanner({
   expectedTagId,
   title,
   description,
-  continuous = false
+  continuous = false,
+  skipExistenceCheck = false
 }: NFCScannerProps) {
   const { isSupported, isReading, isWriting, readNFCTag, writeNFCTag, cancelNFC, getNFCSupportInfo } = useNFC()
   const [status, setStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
@@ -60,7 +62,7 @@ export function NFCScanner({
 
     try {
       if (mode === 'read') {
-        const result = await readNFCTag()
+        const result = await readNFCTag(skipExistenceCheck)
         if (result.success && result.tagId) {
           setDetectedTagId(result.tagId)
           onSuccess(result.tagId)
