@@ -42,7 +42,7 @@ export function useNFC() {
   useEffect(() => {
     // Verificar soporte cuando el componente se monta
     checkNFCSupport()
-  }, [checkNFCSupport, buildSingleTextMessage, readNdefTextRecordsOnce, normalizeNfcId])
+  }, [checkNFCSupport])
 
   // ✅ MEJORAR: Agregar función para obtener información detallada de compatibilidad
   const getNFCSupportInfo = useCallback(() => {
