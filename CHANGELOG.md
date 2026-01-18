@@ -8,17 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Validación estricta de serial number en lectura NFC**: Ahora solo se acepta `serialNumber` como identificador válido
-  - Si el navegador no expone `serialNumber`, se rechaza el tag con un error claro
-  - Evita el uso de contenido NDEF como ID para prevenir duplicados
-  - Soluciona casos donde distintos tags compartían el mismo NDEF
-- **Priorización de serial number en lectura NFC**: Cambiada la lógica de identificación de tags NFC para priorizar el número de serie del chip
-  - Prioridad 1: Usar serial number del chip NFC (convertido a formato MAC para legibilidad)
-  - Prioridad 2: Fallback a contenido NDEF escrito en el tag (compatibilidad con tags antiguos)
-  - Prioridad 3: Generar ID único automáticamente y escribirlo en el tag si no hay serial ni NDEF
-  - Los tags ya registrados con contenido NDEF siguen funcionando correctamente
-  - Tags nuevos sin serial number ni contenido NDEF se auto-identifican escribiendo un ID único
-  - Mejora significativa en la unicidad de identificación basada en hardware del chip
+- **Estrategia de IDs NFC basada en UUID**: Se usa `serialNumber` si está disponible; si no, se escribe/valida un ID hexadecimal único en el NDEF
+  - Prioridad 1: Usar `serialNumber` del chip NFC (formato MAC para legibilidad)
+  - Prioridad 2: Usar NDEF solo si es un ID hexadecimal válido (UUID sin guiones)
+  - Si el NDEF es inválido, se genera un ID nuevo y se escribe en el tag
+  - Si el NDEF es válido pero está duplicado, se reescribe con un nuevo ID único
+  - Evita duplicados cuando el navegador no expone `serialNumber`
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado

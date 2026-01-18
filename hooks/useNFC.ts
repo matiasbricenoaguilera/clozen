@@ -137,27 +137,28 @@ export function useNFC() {
     }
   }, [])
 
-  // Generar nuevo ID único para tag NFC
+  // Normalizar ID NFC: limpiar, upper y remover guiones
+  const normalizeNfcId = useCallback((value: string) => {
+    return value.trim().toUpperCase().replace(/-/g, '')
+  }, [])
+
+  // Validar ID NFC: hexadecimal largo (>= 8 chars, sin separadores)
+  const isValidNfcId = useCallback((value: string) => {
+    return /^[0-9A-F]{8,}$/.test(value)
+  }, [])
+
+  // Generar nuevo ID único para tag NFC (UUID v4 sin guiones)
   const generateNewTagId = useCallback(() => {
-    // Generar ID tipo MAC basado en timestamp y random
-    const timestamp = Date.now()
-    const random = Math.floor(Math.random() * 0xFFFFFF)
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID().replace(/-/g, '').toUpperCase()
+      }
+    } catch {}
 
-    const macBytes = [
-      (timestamp >> 40) & 0xFF,
-      (timestamp >> 32) & 0xFF,
-      (timestamp >> 24) & 0xFF,
-      (timestamp >> 16) & 0xFF,
-      (timestamp >> 8) & 0xFF,
-      timestamp & 0xFF
-    ]
-
-    // Mezclar con random para mayor unicidad
-    macBytes[3] = (macBytes[3] ^ (random >> 16)) & 0xFF
-    macBytes[4] = (macBytes[4] ^ (random >> 8)) & 0xFF
-    macBytes[5] = (macBytes[5] ^ random) & 0xFF
-
-    return macBytes.map(b => b.toString(16).padStart(2, '0')).join(':').toUpperCase()
+    // Fallback: timestamp + random (hexadecimal largo)
+    const timestamp = Date.now().toString(16)
+    const random = Math.floor(Math.random() * 0xFFFFFFFFFFFF).toString(16)
+    return `${timestamp}${random}`.toUpperCase()
   }, [])
 
   // Leer tag NFC
@@ -238,7 +239,7 @@ export function useNFC() {
             const decoder = new TextDecoder()
             let tagId = ''
 
-            // Leer contenido NDEF solo para logging/debug (NO usarlo como ID)
+            // Leer contenido NDEF (se usa solo si es un ID válido)
             let ndefContent = ''
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
@@ -247,37 +248,75 @@ export function useNFC() {
               }
             }
 
+            const normalizedNdef = ndefContent ? normalizeNfcId(ndefContent) : ''
+
             // ✅ DEBUG: Log para ver qué información está disponible
             console.log('🔍 NFC Event Info:', {
               hasSerialNumber: !!event.serialNumber,
               serialNumber: event.serialNumber,
               ndefContent: ndefContent,
+              normalizedNdef,
               eventKeys: Object.keys(event)
             })
 
-            // ✅ PRIORIDAD ÚNICA: Solo usar serial number si está disponible
-            if (!event.serialNumber) {
-              resolveOnce({
-                success: false,
-                error: 'Serial number no disponible en Web NFC. No se puede registrar este tag.'
-              }, 'onreading-no-serial')
-              return
+            // ✅ PRIORIDAD 1: Usar serial number si está disponible
+            if (event.serialNumber) {
+              // Intentar convertir a formato MAC (más legible)
+              tagId = generateMacLikeId(event.serialNumber)
+
+              // Si la conversión falla, usar serial number directo
+              if (!tagId) {
+                tagId = event.serialNumber
+              }
+
+              console.log('✅ Usando serial number:', tagId)
             }
 
-            // Intentar convertir a formato MAC (más legible)
-            tagId = generateMacLikeId(event.serialNumber)
-
-            // Si la conversión falla, usar serial number directo
-            if (!tagId) {
-              tagId = event.serialNumber
+            // ✅ PRIORIDAD 2: Usar NDEF solo si es un ID válido (hexadecimal largo)
+            if (!tagId && normalizedNdef && isValidNfcId(normalizedNdef)) {
+              tagId = normalizedNdef
+              console.log('✅ Usando ID válido desde NDEF:', tagId)
             }
 
-            console.log('✅ Usando serial number:', tagId)
+            // ✅ Si NO hay serial ni ID válido en NDEF
+            if (!tagId) {
+              if (skipExistenceCheck) {
+                resolveOnce({
+                  success: false,
+                  error: 'Tag sin ID válido. Registra el tag primero.'
+                }, 'onreading-invalid-ndef')
+                return
+              }
+
+              // Generar nuevo ID único y escribirlo en el tag
+              const newTagId = generateNewTagId()
+              tagId = newTagId
+
+              console.log('⚠️ Tag sin ID válido, generando y escribiendo ID único:', newTagId)
+
+              try {
+                const encoder = new TextEncoder()
+                const message = {
+                  records: [
+                    {
+                      recordType: 'text',
+                      data: encoder.encode(newTagId)
+                    }
+                  ]
+                }
+
+                // @ts-ignore - Web NFC API types
+                await ndef.write(message)
+                console.log('✅ ID único escrito en tag NFC:', newTagId)
+              } catch (writeError) {
+                console.warn('⚠️ No se pudo escribir ID en tag, pero se usará el ID generado:', newTagId, writeError)
+              }
+            }
 
             if (!tagId) {
               resolveOnce({
                 success: false,
-                error: 'No se pudo leer el serial number del tag'
+                error: 'No se pudo obtener un ID válido del tag'
               }, 'onreading-no-tag-id')
               return
             }
@@ -287,11 +326,40 @@ export function useNFC() {
             if (!skipExistenceCheck) {
               const tagCheck = await checkTagExists(tagId)
               if (tagCheck.exists) {
-                resolveOnce({
-                  success: false,
-                  error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
-                }, 'onreading-tag-exists')
-                return
+                // Si el ID viene del NDEF (no del serial), reescribir con un ID nuevo para evitar duplicados
+                if (!event.serialNumber) {
+                  const newTagId = generateNewTagId()
+                  tagId = newTagId
+
+                  console.log('⚠️ ID NFC duplicado, reescribiendo con nuevo ID:', newTagId)
+
+                  try {
+                    const encoder = new TextEncoder()
+                    const message = {
+                      records: [
+                        {
+                          recordType: 'text',
+                          data: encoder.encode(newTagId)
+                        }
+                      ]
+                    }
+
+                    // @ts-ignore - Web NFC API types
+                    await ndef.write(message)
+                  } catch (writeError) {
+                    resolveOnce({
+                      success: false,
+                      error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
+                    }, 'onreading-tag-exists')
+                    return
+                  }
+                } else {
+                  resolveOnce({
+                    success: false,
+                    error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
+                  }, 'onreading-tag-exists')
+                  return
+                }
               }
             }
 
@@ -351,7 +419,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
