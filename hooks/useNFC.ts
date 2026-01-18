@@ -138,7 +138,7 @@ export function useNFC() {
   }, [])
 
   // Leer tag NFC
-  const readNFCTag = useCallback(async (): Promise<NFCReadResult> => {
+  const readNFCTag = useCallback(async (skipExistenceCheck: boolean = false): Promise<NFCReadResult> => {
     if (!checkNFCSupport()) {
       return {
         success: false,
@@ -187,14 +187,17 @@ export function useNFC() {
               return
             }
 
-            // Verificar si el tag ya está asociado
-            const tagCheck = await checkTagExists(tagId)
-            if (tagCheck.exists) {
-              resolve({
-                success: false,
-                error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
-              })
-              return
+            // ✅ Solo verificar si el tag ya está asociado si NO se omite la verificación
+            // (útil cuando estás buscando prendas existentes para devolver al closet)
+            if (!skipExistenceCheck) {
+              const tagCheck = await checkTagExists(tagId)
+              if (tagCheck.exists) {
+                resolve({
+                  success: false,
+                  error: `Este tag NFC ya está asociado a ${tagCheck.entity === 'garment' ? 'la prenda' : 'la caja'} "${tagCheck.name}"`
+                })
+                return
+              }
             }
 
             resolve({
