@@ -126,8 +126,8 @@ export default function AdminOrganizePage() {
     setBatchCodes(newBatchCodes)
     batchCodesRef.current = newBatchCodes
     
-    // Cerrar el scanner después de leer exitosamente
-    setNfcScanMode(null)
+    // ✅ NO cerrar el scanner - mantener escaneando continuamente
+    // El scanner seguirá activo para escanear más códigos
     
     // NO buscar automáticamente - el usuario puede agregar más códigos antes de buscar
   }
@@ -165,7 +165,12 @@ export default function AdminOrganizePage() {
       }
 
       setFoundGarment(data)
-      setSuccess(`Prenda encontrada: ${data.name}`)
+      // ✅ Mostrar mensaje más claro según el estado de la prenda
+      if (data.status === 'in_use') {
+        setSuccess(`✅ Prenda encontrada: ${data.name} (está en uso - se restaurará al asignar caja)`)
+      } else {
+        setSuccess(`Prenda encontrada: ${data.name}`)
+      }
     } catch (error) {
       console.error('Error finding garment:', error)
       setError('Error al buscar la prenda')
@@ -783,7 +788,8 @@ export default function AdminOrganizePage() {
                       setBatchError(`Error NFC: ${error}`)
                     }}
                     title="Escanear Tag NFC"
-                    description="Acércate un tag NFC para agregarlo a la lista de códigos"
+                    description="Escaneo continuo: acércate tags NFC y se agregarán automáticamente al campo de texto"
+                    continuous={true}
                   />
                   <Button 
                     onClick={() => { 
