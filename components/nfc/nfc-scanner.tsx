@@ -69,13 +69,13 @@ export function NFCScanner({
           
           // ✅ Si está en modo continuo, automáticamente reiniciar escaneo
           if (continuous) {
-            // Esperar un breve momento antes de reiniciar para dar feedback visual
+            // Esperar más tiempo antes de reiniciar para asegurar que el NDEFReader anterior esté completamente detenido
             setTimeout(() => {
               isScanningRef.current = false
               setStatus('scanning')
               setDetectedTagId('')
               handleStartScan()
-            }, 500)
+            }, 1000) // Aumentado de 500ms a 1000ms para dar más tiempo de limpieza
           } else {
             isScanningRef.current = false
             setStatus('success')
