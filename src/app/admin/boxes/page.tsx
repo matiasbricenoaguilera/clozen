@@ -24,7 +24,8 @@ export default function AdminBoxesPage() {
     name: '',
     description: '',
     location: '',
-    nfcTagId: ''
+    nfcTagId: '',
+    maxCapacity: 15 // Valor por defecto
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -90,7 +91,8 @@ export default function AdminBoxesPage() {
             name: formData.name,
             description: formData.description,
             location: formData.location,
-            nfc_tag_id: formData.nfcTagId || null
+            nfc_tag_id: formData.nfcTagId || null,
+            max_capacity: formData.maxCapacity || 15
           })
           .eq('id', editingBox.id)
 
@@ -132,6 +134,7 @@ export default function AdminBoxesPage() {
             description: formData.description,
             location: formData.location,
             nfc_tag_id: formData.nfcTagId || null,
+            max_capacity: formData.maxCapacity || 15,
             created_by: userProfile?.id
           })
           .select()
@@ -200,7 +203,8 @@ export default function AdminBoxesPage() {
       name: box.name,
       description: box.description || '',
       location: box.location || '',
-      nfcTagId: box.nfc_tag_id || ''
+      nfcTagId: box.nfc_tag_id || '',
+      maxCapacity: box.max_capacity || 15
     })
     setDialogOpen(true)
   }
@@ -252,7 +256,8 @@ export default function AdminBoxesPage() {
       name: '',
       description: '',
       location: '',
-      nfcTagId: ''
+      nfcTagId: '',
+      maxCapacity: 15
     })
     setError('')
   }
@@ -338,6 +343,23 @@ export default function AdminBoxesPage() {
                 />
               </div>
 
+              <div>
+                <Label htmlFor="maxCapacity">Capacidad Máxima de Prendas *</Label>
+                <Input
+                  id="maxCapacity"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={formData.maxCapacity}
+                  onChange={(e) => setFormData(prev => ({ ...prev, maxCapacity: parseInt(e.target.value) || 15 }))}
+                  placeholder="15"
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Número máximo de prendas que puede contener esta caja
+                </p>
+              </div>
+
               {/* NFC Scanner */}
               <div>
                 <Label>Tag NFC</Label>
@@ -407,6 +429,13 @@ export default function AdminBoxesPage() {
                   {box.description && (
                     <p className="text-sm text-muted-foreground">{box.description}</p>
                   )}
+
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm text-blue-600">
+                      Capacidad: {box.max_capacity || 15} prendas
+                    </span>
+                  </div>
 
                   {box.nfc_tag_id ? (
                     <div className="flex items-center gap-2">

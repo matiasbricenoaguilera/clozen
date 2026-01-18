@@ -11,6 +11,7 @@ export type UserRole = 'user' | 'admin'
 // Box types
 export type Box = Tables<'boxes'> & {
   garment_count?: number
+  max_capacity?: number // Capacidad máxima de prendas (default: 15)
 }
 
 // Garment types

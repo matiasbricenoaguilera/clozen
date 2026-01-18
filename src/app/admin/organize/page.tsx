@@ -383,11 +383,16 @@ export default function AdminOrganizePage() {
       const newCount = currentBoxCount + garmentsToAssign
 
       // Si la caja se llenará, buscar la más vacía
+      const selectedBox = boxes.find(b => b.id === selectedBoxForBatch)
+      const selectedBoxMaxCapacity = selectedBox ? getBoxMaxCapacity(selectedBox) : 15
       let targetBoxId = selectedBoxForBatch
-      if (newCount > 15) {
+      if (newCount > selectedBoxMaxCapacity) {
         // Buscar caja más vacía
         const availableBoxes = boxes
-          .filter(box => (box.garment_count || 0) < 15)
+          .filter(box => {
+            const maxCapacity = getBoxMaxCapacity(box)
+            return (box.garment_count || 0) < maxCapacity
+          })
           .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
         
         if (availableBoxes.length > 0) {
@@ -476,10 +481,17 @@ export default function AdminOrganizePage() {
     return batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length
   }, [batchCodes])
 
-  // Función para obtener cajas recomendadas (< 60% = 9 prendas de 15)
+  // ✅ Helper para obtener capacidad máxima de una caja
+  const getBoxMaxCapacity = (box: Box) => box.max_capacity || 15
+
+  // Función para obtener cajas recomendadas (< 60% de capacidad)
   const getRecommendedBoxes = () => {
     return boxes
-      .filter(box => (box.garment_count || 0) < 9)
+      .filter(box => {
+        const maxCapacity = getBoxMaxCapacity(box)
+        const threshold = Math.floor(maxCapacity * 0.6)
+        return (box.garment_count || 0) < threshold
+      })
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
   }
 
@@ -524,7 +536,10 @@ export default function AdminOrganizePage() {
     
     // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
     const availableBoxes = boxes
-      .filter(box => (box.garment_count || 0) < 15)
+      .filter(box => {
+        const maxCapacity = getBoxMaxCapacity(box)
+        return (box.garment_count || 0) < maxCapacity
+      })
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
     
     return availableBoxes.length > 0 ? availableBoxes[0] : null
@@ -536,14 +551,17 @@ export default function AdminOrganizePage() {
       // Si se está moviendo a una caja (no removiendo), verificar capacidad
       if (targetBoxId) {
         const targetBox = boxes.find(b => b.id === targetBoxId)
-        if (targetBox && (targetBox.garment_count || 0) >= 15) {
-          const mostEmptyBox = findMostEmptyBox()
-          if (mostEmptyBox) {
-            setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
-          } else {
-            setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+        if (targetBox) {
+          const maxCapacity = getBoxMaxCapacity(targetBox)
+          if ((targetBox.garment_count || 0) >= maxCapacity) {
+            const mostEmptyBox = findMostEmptyBox()
+            if (mostEmptyBox) {
+              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+            } else {
+              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
+            }
+            return
           }
-          return
         }
       }
 
@@ -594,14 +612,17 @@ export default function AdminOrganizePage() {
 
       // Verificar capacidad de la caja
       const targetBox = boxes.find(b => b.id === targetBoxId)
-      if (targetBox && (targetBox.garment_count || 0) >= 15) {
-        const mostEmptyBox = findMostEmptyBox()
-        if (mostEmptyBox) {
-          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
-        } else {
-          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+      if (targetBox) {
+        const maxCapacity = getBoxMaxCapacity(targetBox)
+        if ((targetBox.garment_count || 0) >= maxCapacity) {
+          const mostEmptyBox = findMostEmptyBox()
+          if (mostEmptyBox) {
+            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+          } else {
+            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
+          }
+          return
         }
-        return
       }
 
       const { error: updateError } = await supabase
@@ -905,7 +926,8 @@ export default function AdminOrganizePage() {
                             setSelectedBoxForBatch(value)
                             const box = boxes.find(b => b.id === value)
                             if (box) {
-                              const availableSpace = 15 - (box.garment_count || 0)
+                              const maxCapacity = getBoxMaxCapacity(box)
+                              const availableSpace = maxCapacity - (box.garment_count || 0)
                               const willFit = foundGarmentsBatch.length <= availableSpace
                               setSelectedBoxInfo({
                                 name: box.name,
@@ -923,8 +945,9 @@ export default function AdminOrganizePage() {
                           <SelectContent>
                             <SelectItem value="none">Sin caja</SelectItem>
                             {boxes.map((box) => {
-                              const availableSpace = 15 - (box.garment_count || 0)
-                              const isFull = (box.garment_count || 0) >= 15
+                              const maxCapacity = getBoxMaxCapacity(box)
+                              const availableSpace = maxCapacity - (box.garment_count || 0)
+                              const isFull = (box.garment_count || 0) >= maxCapacity
                               const willFit = foundGarmentsBatch.length <= availableSpace
                               return (
                                 <SelectItem 
@@ -932,7 +955,7 @@ export default function AdminOrganizePage() {
                                   value={box.id}
                                   disabled={isFull || !willFit}
                                 >
-                                  {box.name} {box.location ? `(${box.location})` : ''} - {box.garment_count || 0}/15
+                                  {box.name} {box.location ? `(${box.location})` : ''} - {box.garment_count || 0}/{maxCapacity}
                                   {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
                                 </SelectItem>
                               )
@@ -1033,7 +1056,8 @@ export default function AdminOrganizePage() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {boxes.map(box => {
-              const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+              const maxCapacity = getBoxMaxCapacity(box)
+              const occupancyPercent = Math.round(((box.garment_count || 0) / maxCapacity) * 100)
               return (
                 <div 
                   key={box.id} 
@@ -1043,7 +1067,7 @@ export default function AdminOrganizePage() {
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold">{box.name}</h3>
                     <Badge variant={occupancyPercent >= 100 ? "destructive" : occupancyPercent >= 60 ? "default" : "secondary"}>
-                      {box.garment_count || 0}/15
+                      {box.garment_count || 0}/{maxCapacity}
                     </Badge>
                   </div>
                   <div className="w-full bg-muted rounded-full h-2 mb-2">
@@ -1121,7 +1145,8 @@ export default function AdminOrganizePage() {
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {getRecommendedBoxes().slice(0, 4).map(box => {
-                        const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
+                        const maxCapacity = getBoxMaxCapacity(box)
+                        const occupancyPercent = Math.round(((box.garment_count || 0) / maxCapacity) * 100)
                         return (
                           <Button
                             key={box.id}
@@ -1133,7 +1158,7 @@ export default function AdminOrganizePage() {
                             <div className="flex items-center justify-between w-full">
                               <span>{box.name}</span>
                               <Badge variant="secondary" className="ml-2">
-                                {box.garment_count || 0}/15 ({occupancyPercent}%)
+                                {box.garment_count || 0}/{maxCapacity} ({occupancyPercent}%)
                               </Badge>
                             </div>
                           </Button>
@@ -1150,8 +1175,9 @@ export default function AdminOrganizePage() {
                   </SelectTrigger>
                   <SelectContent>
                     {boxes.map(box => {
-                      const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
-                      const isFull = (box.garment_count || 0) >= 15
+                      const maxCapacity = getBoxMaxCapacity(box)
+                      const occupancyPercent = Math.round(((box.garment_count || 0) / maxCapacity) * 100)
+                      const isFull = (box.garment_count || 0) >= maxCapacity
                       return (
                         <SelectItem
                           key={box.id}
@@ -1161,7 +1187,7 @@ export default function AdminOrganizePage() {
                           <div className="flex items-center justify-between w-full">
                             <span>{box.name}</span>
                             <Badge variant="secondary" className="ml-2">
-                              {box.garment_count || 0}/15
+                              {box.garment_count || 0}/{maxCapacity}
                               {isFull && ' (Llena)'}
                             </Badge>
                           </div>
@@ -1201,7 +1227,12 @@ export default function AdminOrganizePage() {
             <DialogHeader>
               <DialogTitle>📦 Prendas en {selectedBox.name}</DialogTitle>
               <DialogDescription>
-                {selectedBox.garment_count || 0} de 15 prendas ({Math.round(((selectedBox.garment_count || 0) / 15) * 100)}% ocupado)
+                {(() => {
+                  const maxCapacity = getBoxMaxCapacity(selectedBox)
+                  const count = selectedBox.garment_count || 0
+                  const percent = Math.round((count / maxCapacity) * 100)
+                  return `${count} de ${maxCapacity} prendas (${percent}% ocupado)`
+                })()}
               </DialogDescription>
             </DialogHeader>
 
@@ -1286,8 +1317,9 @@ export default function AdminOrganizePage() {
                   {boxes
                     .filter(b => b.id !== selectedBox?.id)
                     .map(box => {
-                      const occupancyPercent = Math.round(((box.garment_count || 0) / 15) * 100)
-                      const isFull = (box.garment_count || 0) >= 15
+                      const maxCapacity = getBoxMaxCapacity(box)
+                      const occupancyPercent = Math.round(((box.garment_count || 0) / maxCapacity) * 100)
+                      const isFull = (box.garment_count || 0) >= maxCapacity
                       return (
                         <Button
                           key={box.id}
@@ -1301,7 +1333,7 @@ export default function AdminOrganizePage() {
                           <div className="flex items-center justify-between w-full">
                             <span>{box.name}</span>
                             <Badge variant={isFull ? "destructive" : "secondary"}>
-                              {box.garment_count || 0}/15 {isFull && '(Llena)'}
+                              {box.garment_count || 0}/{maxCapacity} {isFull && '(Llena)'}
                             </Badge>
                           </div>
                         </Button>
