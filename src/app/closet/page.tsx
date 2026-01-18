@@ -52,7 +52,7 @@ export default function ClosetPage() {
   const [loadingGarments, setLoadingGarments] = useState(false)
   const [loadingBoxes, setLoadingBoxes] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedBox, setSelectedBox] = useState<string>('')
+  const [selectedGarmentType, setSelectedGarmentType] = useState<string>('')
   const [showNFCScanner, setShowNFCScanner] = useState(false)
   const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
   const [nfcError, setNfcError] = useState('')
@@ -219,6 +219,17 @@ export default function ClosetPage() {
     }
   }, [isSupabaseConfigured])
 
+  // ✅ Obtener tipos únicos de prendas para el selector
+  const availableGarmentTypes = useMemo(() => {
+    const types = new Set<string>()
+    garments.forEach(garment => {
+      if (garment.type) {
+        types.add(garment.type)
+      }
+    })
+    return Array.from(types).sort()
+  }, [garments])
+
   // Memoizar filteredGarments para evitar recálculos innecesarios
   const filteredGarments = useMemo(() => {
     if (!garments.length) return []
@@ -227,10 +238,10 @@ export default function ClosetPage() {
       const matchesSearch = !lowerSearchTerm || 
         garment.name.toLowerCase().includes(lowerSearchTerm) ||
         garment.type.toLowerCase().includes(lowerSearchTerm)
-      const matchesBox = !selectedBox || garment.box_id === selectedBox
-      return matchesSearch && matchesBox
+      const matchesType = !selectedGarmentType || garment.type === selectedGarmentType
+      return matchesSearch && matchesType
     })
-  }, [garments, searchTerm, selectedBox])
+  }, [garments, searchTerm, selectedGarmentType])
 
   // Memoizar getBoxName para evitar recrear la función en cada render
   const getBoxName = useCallback((boxId: string | null) => {
@@ -1096,13 +1107,13 @@ export default function ClosetPage() {
           />
         </div>
         <select
-          value={selectedBox}
-          onChange={(e) => setSelectedBox(e.target.value)}
+          value={selectedGarmentType}
+          onChange={(e) => setSelectedGarmentType(e.target.value)}
           className="px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-auto sm:min-w-[180px]"
         >
-          <option value="">Todas las cajas</option>
-          {boxes.map(box => (
-            <option key={box.id} value={box.id}>{box.name}</option>
+          <option value="">Todos los tipos</option>
+          {availableGarmentTypes.map(type => (
+            <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
           ))}
         </select>
       </div>
@@ -1112,15 +1123,15 @@ export default function ClosetPage() {
         <div className="text-center py-12">
           <Shirt className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">
-            {searchTerm || selectedBox ? 'No se encontraron prendas' : 'Tu closet está vacío'}
+            {searchTerm || selectedGarmentType ? 'No se encontraron prendas' : 'Tu closet está vacío'}
           </h3>
           <p className="text-muted-foreground mb-4">
-            {searchTerm || selectedBox
+            {searchTerm || selectedGarmentType
               ? 'Intenta con otros filtros de búsqueda'
               : 'Comienza agregando tu primera prenda'
             }
           </p>
-          {!searchTerm && !selectedBox && userProfile?.role === 'admin' && (
+          {!searchTerm && !selectedGarmentType && userProfile?.role === 'admin' && (
             <Link href="/closet/add">
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
