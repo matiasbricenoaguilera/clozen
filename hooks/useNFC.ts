@@ -179,13 +179,9 @@ export function useNFC() {
             // #endregion
             return // ✅ Prevenir múltiples resoluciones
           }
-          resolved = true
           
-          // ✅ REMOVER listeners ANTES de detener para evitar que onreadingerror se dispare
-          try {
-            ndef.onreading = null
-            ndef.onreadingerror = null
-          } catch {}
+          // ✅ ESTABLECER flag ANTES de hacer cualquier otra cosa (crítico para prevenir race conditions)
+          resolved = true
           
           // Limpiar antes de resolver
           try { 
@@ -195,6 +191,12 @@ export function useNFC() {
             ndef?.stop() 
           } catch {}
           if (timeoutId) clearTimeout(timeoutId)
+          
+          // ✅ REMOVER listeners DESPUÉS de detener (permite que stop() complete sin interferencias)
+          try {
+            ndef.onreading = null
+            ndef.onreadingerror = null
+          } catch {}
           
           // #region agent log
           fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:183',message:'Resolving promise',data:{source,success:result.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
@@ -267,8 +269,16 @@ export function useNFC() {
 
         ndef.onreadingerror = () => {
           // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:257',message:'onreadingerror event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:268',message:'onreadingerror event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
           // #endregion
+
+          // ✅ Verificar flag ANTES de llamar resolveOnce (previene race conditions)
+          if (resolved) {
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:273',message:'onreadingerror ignored - already resolved',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            return
+          }
 
           // ✅ Solo resolver si aún no se ha resuelto (evita que stop() dispare este error)
           resolveOnce({
