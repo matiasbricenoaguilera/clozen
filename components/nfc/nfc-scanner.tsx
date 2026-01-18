@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNFC } from '@/hooks/useNFC'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,6 +15,7 @@ interface NFCScannerProps {
   expectedTagId?: string // Para modo write
   title?: string
   description?: string
+  continuous?: boolean // Si es true, continúa escaneando después de cada lectura exitosa
 }
 
 export function NFCScanner({
@@ -23,13 +24,16 @@ export function NFCScanner({
   onError,
   expectedTagId,
   title,
-  description
+  description,
+  continuous = false
 }: NFCScannerProps) {
   const { isSupported, isReading, isWriting, readNFCTag, writeNFCTag, cancelNFC, getNFCSupportInfo } = useNFC()
   const [status, setStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
   const [detectedTagId, setDetectedTagId] = useState('')
   const [supportInfo, setSupportInfo] = useState<any>(null)
+  const isScanningRef = useRef(false) // Prevenir múltiples escaneos simultáneos
+  const autoStartedRef = useRef(false) // Prevenir inicio automático múltiple
 
   useEffect(() => {
     // Obtener información detallada al montar
@@ -37,7 +41,19 @@ export function NFCScanner({
     setSupportInfo(info)
   }, [getNFCSupportInfo])
 
+  // ✅ Iniciar escaneo automáticamente si está en modo continuo
+  useEffect(() => {
+    if (continuous && status === 'idle' && isSupported && mode === 'read' && !autoStartedRef.current) {
+      autoStartedRef.current = true
+      handleStartScan()
+    }
+  }, [continuous, isSupported, mode, status]) // Solo cuando cambian estas props
+
   const handleStartScan = async () => {
+    // ✅ Prevenir múltiples escaneos simultáneos
+    if (isScanningRef.current) return
+    isScanningRef.current = true
+
     setStatus('scanning')
     setErrorMessage('')
     setDetectedTagId('')
@@ -47,15 +63,30 @@ export function NFCScanner({
         const result = await readNFCTag()
         if (result.success && result.tagId) {
           setDetectedTagId(result.tagId)
-          setStatus('success')
           onSuccess(result.tagId)
+          
+          // ✅ Si está en modo continuo, automáticamente reiniciar escaneo
+          if (continuous) {
+            // Esperar un breve momento antes de reiniciar para dar feedback visual
+            setTimeout(() => {
+              isScanningRef.current = false
+              setStatus('scanning')
+              setDetectedTagId('')
+              handleStartScan()
+            }, 500)
+          } else {
+            isScanningRef.current = false
+            setStatus('success')
+          }
         } else {
+          isScanningRef.current = false
           setErrorMessage(result.error || 'Error desconocido')
           setStatus('error')
           onError?.(result.error || 'Error desconocido')
         }
       } else if (mode === 'write' && expectedTagId) {
         const result = await writeNFCTag(expectedTagId)
+        isScanningRef.current = false
         if (result.success) {
           setStatus('success')
           onSuccess(expectedTagId)
@@ -66,6 +97,7 @@ export function NFCScanner({
         }
       }
     } catch (error) {
+      isScanningRef.current = false
       setErrorMessage('Error inesperado')
       setStatus('error')
       onError?.('Error inesperado')
@@ -73,6 +105,7 @@ export function NFCScanner({
   }
 
   const handleCancel = async () => {
+    isScanningRef.current = false
     await cancelNFC()
     setStatus('idle')
     setErrorMessage('')
@@ -174,16 +207,25 @@ export function NFCScanner({
             <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
             <div>
               <p className="font-medium text-blue-900 dark:text-blue-100">
-                {mode === 'read' ? 'Leyendo tag NFC...' : 'Escribiendo tag NFC...'}
+                {continuous 
+                  ? 'Escaneando continuamente...' 
+                  : (mode === 'read' ? 'Leyendo tag NFC...' : 'Escribiendo tag NFC...')}
               </p>
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                Acércate el tag NFC al teléfono
+                {continuous 
+                  ? 'Acércate tags NFC al teléfono (se agregarán automáticamente)' 
+                  : 'Acércate el tag NFC al teléfono'}
               </p>
+              {continuous && detectedTagId && (
+                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                  ✓ Último código leído: {detectedTagId}
+                </p>
+              )}
             </div>
           </div>
         )}
 
-        {status === 'success' && (
+        {status === 'success' && !continuous && (
           <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
             <CheckCircle className="h-5 w-5 text-green-600" />
             <div>
