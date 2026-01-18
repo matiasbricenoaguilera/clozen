@@ -124,7 +124,7 @@ export function NFCScanner({
         isScanningRef.current = false
         if (result.success) {
           setStatus('success')
-          setInfoMessage('NDEF sobrescrito con un único registro UTF‑8.')
+          setInfoMessage('NDEF sobrescrito y verificado correctamente.')
           onSuccess(expectedTagId)
         } else {
           setErrorMessage(result.error || 'Error desconocido')

@@ -42,7 +42,7 @@ export function useNFC() {
   useEffect(() => {
     // Verificar soporte cuando el componente se monta
     checkNFCSupport()
-  }, [checkNFCSupport])
+  }, [checkNFCSupport, buildSingleTextMessage, readNdefTextRecordsOnce, normalizeNfcId])
 
   // ✅ MEJORAR: Agregar función para obtener información detallada de compatibilidad
   const getNFCSupportInfo = useCallback(() => {
@@ -159,6 +159,51 @@ export function useNFC() {
       ]
     }
   }, [])
+
+  // Leer registros NDEF de texto una sola vez (para verificación de escritura)
+  const readNdefTextRecordsOnce = useCallback(async (): Promise<string[]> => {
+    if (!checkNFCSupport()) return []
+
+    // @ts-ignore - Web NFC API types
+    const ndef = new NDEFReader()
+    const decoder = new TextDecoder()
+    let timeoutId: NodeJS.Timeout | null = null
+
+    try {
+      await ndef.scan()
+      return await new Promise((resolve) => {
+        ndef.onreading = (event: any) => {
+          try {
+            const records: string[] = []
+            for (const record of event.message.records) {
+              if (record.recordType === 'text') {
+                records.push(decoder.decode(record.data))
+              }
+            }
+            resolve(records)
+          } catch {
+            resolve([])
+          } finally {
+            try { ndef.stop() } catch {}
+            if (timeoutId) clearTimeout(timeoutId)
+          }
+        }
+
+        ndef.onreadingerror = () => {
+          try { ndef.stop() } catch {}
+          if (timeoutId) clearTimeout(timeoutId)
+          resolve([])
+        }
+
+        timeoutId = setTimeout(() => {
+          try { ndef.stop() } catch {}
+          resolve([])
+        }, 5000)
+      })
+    } catch {
+      return []
+    }
+  }, [checkNFCSupport])
 
   // Generar nuevo ID único para tag NFC (UUID v4 sin guiones)
   const generateNewTagId = useCallback(() => {
@@ -447,6 +492,19 @@ export function useNFC() {
           try {
             // @ts-ignore - Web NFC API types
             await ndef.write(message)
+
+            // ✅ Verificación automática: volver a leer y comprobar el ID escrito
+            const writtenId = normalizeNfcId(tagId)
+            const verifyRecords = await readNdefTextRecordsOnce()
+            const normalized = verifyRecords.map((r) => normalizeNfcId(r))
+
+            if (!normalized.includes(writtenId)) {
+              resolve({
+                success: false,
+                error: 'No se pudo verificar el ID escrito. El tag pudo no haberse grabado.'
+              })
+              return
+            }
 
             resolve({
               success: true,
