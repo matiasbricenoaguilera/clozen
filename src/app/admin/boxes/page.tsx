@@ -27,6 +27,7 @@ export default function AdminBoxesPage() {
     nfcTagId: '',
     maxCapacity: 15 // Valor por defecto
   })
+  const [maxCapacityInput, setMaxCapacityInput] = useState('15') // Input como string para permitir edición
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -199,13 +200,15 @@ export default function AdminBoxesPage() {
 
   const handleEdit = (box: Box) => {
     setEditingBox(box)
+    const maxCapacity = box.max_capacity || 15
     setFormData({
       name: box.name,
       description: box.description || '',
       location: box.location || '',
       nfcTagId: box.nfc_tag_id || '',
-      maxCapacity: box.max_capacity || 15
+      maxCapacity: maxCapacity
     })
+    setMaxCapacityInput(String(maxCapacity)) // Sincronizar input string
     setDialogOpen(true)
   }
 
@@ -259,6 +262,7 @@ export default function AdminBoxesPage() {
       nfcTagId: '',
       maxCapacity: 15
     })
+    setMaxCapacityInput('15') // Resetear input string
     setError('')
   }
 
@@ -350,8 +354,24 @@ export default function AdminBoxesPage() {
                   type="number"
                   min="1"
                   max="100"
-                  value={formData.maxCapacity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, maxCapacity: parseInt(e.target.value) || 15 }))}
+                  value={maxCapacityInput}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setMaxCapacityInput(value) // Permitir string vacío temporalmente
+                    // Convertir a número solo si hay valor válido
+                    const numValue = parseInt(value)
+                    if (!isNaN(numValue) && numValue > 0) {
+                      setFormData(prev => ({ ...prev, maxCapacity: numValue }))
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Al perder el foco, asegurar valor válido
+                    const numValue = parseInt(e.target.value)
+                    if (isNaN(numValue) || numValue < 1) {
+                      setMaxCapacityInput('15')
+                      setFormData(prev => ({ ...prev, maxCapacity: 15 }))
+                    }
+                  }}
                   placeholder="15"
                   required
                 />
