@@ -81,10 +81,26 @@ export function NFCScanner({
             setStatus('success')
           }
         } else {
-          isScanningRef.current = false
-          setErrorMessage(result.error || 'Error desconocido')
-          setStatus('error')
-          onError?.(result.error || 'Error desconocido')
+          // ✅ En modo continuo, también reiniciar el escaneo después de un error
+          if (continuous) {
+            // Mostrar el error brevemente, luego continuar escaneando
+            setErrorMessage(result.error || 'Error desconocido')
+            setStatus('error')
+            onError?.(result.error || 'Error desconocido')
+            // Reiniciar después de un breve momento
+            setTimeout(() => {
+              isScanningRef.current = false
+              setStatus('scanning')
+              setErrorMessage('')
+              setDetectedTagId('')
+              handleStartScan()
+            }, 1000) // Un poco más de tiempo para errores
+          } else {
+            isScanningRef.current = false
+            setErrorMessage(result.error || 'Error desconocido')
+            setStatus('error')
+            onError?.(result.error || 'Error desconocido')
+          }
         }
       } else if (mode === 'write' && expectedTagId) {
         const result = await writeNFCTag(expectedTagId)
