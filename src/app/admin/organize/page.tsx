@@ -118,13 +118,28 @@ export default function AdminOrganizePage() {
     const normalizedTagId = tagId.trim().toUpperCase()
     console.log('📱 Código NFC leído:', { original: tagId, normalized: normalizedTagId })
     
-    // Agregar al batchCodes (separado por /)
-    const newBatchCodes = batchCodes 
-      ? `${batchCodes}/${normalizedTagId}`
-      : normalizedTagId
+    // ✅ Usar ref para obtener el valor actual (evita problemas con closure/estado desactualizado)
+    const currentBatchCodes = batchCodesRef.current || batchCodes
+    
+    // Agregar al batchCodes (separado por /) solo si el código no está ya presente
+    let newBatchCodes: string
+    if (currentBatchCodes) {
+      // Verificar si el código ya existe para evitar duplicados
+      const existingCodes = currentBatchCodes.split(/[/,\n\r\t; ]+/).map(c => c.trim().toUpperCase())
+      if (existingCodes.includes(normalizedTagId)) {
+        console.log('⚠️ Código ya existe, omitiendo:', normalizedTagId)
+        return // No agregar código duplicado
+      }
+      newBatchCodes = `${currentBatchCodes}/${normalizedTagId}`
+    } else {
+      newBatchCodes = normalizedTagId
+    }
     
     setBatchCodes(newBatchCodes)
     batchCodesRef.current = newBatchCodes
+    
+    // ✅ Limpiar cualquier error previo al agregar código exitosamente
+    setBatchError('')
     
     // ✅ NO cerrar el scanner - mantener escaneando continuamente
     // El scanner seguirá activo para escanear más códigos
@@ -785,7 +800,19 @@ export default function AdminOrganizePage() {
                     mode="read"
                     onSuccess={handleNFCRead}
                     onError={(error) => {
-                      setBatchError(`Error NFC: ${error}`)
+                      // ✅ Solo mostrar error si no es inmediatamente después de un éxito
+                      // El error se limpia en handleNFCRead cuando hay éxito, así que si llegamos aquí
+                      // es un error real (no un falso positivo de onreadingerror después de stop)
+                      setTimeout(() => {
+                        // Verificar que el error no haya sido limpiado por un éxito reciente
+                        setBatchError(prev => {
+                          // Si no hay error previo relacionado con NFC, establecer el nuevo
+                          if (!prev.includes('Error NFC')) {
+                            return `Error NFC: ${error}`
+                          }
+                          return prev
+                        })
+                      }, 100) // Pequeño delay para permitir que handleNFCRead limpie el error primero
                     }}
                     title="Escanear Tag NFC"
                     description="Escaneo continuo: acércate tags NFC y se agregarán automáticamente al campo de texto"
