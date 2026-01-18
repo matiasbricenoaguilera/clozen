@@ -237,9 +237,9 @@ export function useNFC() {
             // Leer el contenido del tag
             const decoder = new TextDecoder()
             let tagId = ''
-            let ndefContent = '' // Guardar contenido NDEF para fallback
 
-            // Leer contenido NDEF primero (guardarlo para fallback si es necesario)
+            // Leer contenido NDEF solo para logging/debug (NO usarlo como ID)
+            let ndefContent = ''
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
                 ndefContent = decoder.decode(record.data)
@@ -255,8 +255,7 @@ export function useNFC() {
               eventKeys: Object.keys(event)
             })
 
-            // ✅ PRIORIDAD 1: Intentar usar serial number del chip (más único)
-            // Nota: event.serialNumber puede no estar disponible en todos los navegadores
+            // ✅ PRIORIDAD ÚNICA: Solo usar serial number si está disponible
             if (event.serialNumber) {
               // Intentar convertir a formato MAC (más legible)
               tagId = generateMacLikeId(event.serialNumber)
@@ -269,34 +268,16 @@ export function useNFC() {
               console.log('✅ Usando serial number:', tagId)
             }
 
-            // ✅ PRIORIDAD 2: Si NO hay serial number Y el NDEF es formato MAC generado por nosotros,
-            // generar un nuevo ID basado en timestamp (para evitar duplicados)
-            if (!tagId && ndefContent) {
-              // Verificar si el NDEF es un formato MAC (XX:XX:XX:XX:XX:XX) que podría ser de un tag previo
-              const isMacFormat = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i.test(ndefContent)
-              
-              if (isMacFormat) {
-                // Si es formato MAC, podría ser de un tag anterior que fue escrito
-                // Para evitar duplicados, generamos un nuevo ID basado en timestamp + contenido
-                // Esto asegura unicidad incluso si dos tags tienen el mismo NDEF
-                const timestamp = Date.now()
-                const contentHash = ndefContent.split(':').map(h => parseInt(h, 16)).join('')
-                tagId = `${timestamp.toString(16)}:${contentHash.substring(0, 10)}`
-                console.log('⚠️ NDEF es formato MAC, generando ID único:', tagId, 'desde:', ndefContent)
-              } else {
-                // Si NO es formato MAC, usar el NDEF como está (tags antiguos)
-                tagId = ndefContent
-                console.log('✅ Usando contenido NDEF:', tagId)
-              }
-            }
-
-            // ✅ PRIORIDAD 3: Si aún no hay ID, generar uno y escribirlo en el tag
+            // ✅ Si NO hay serial number, generar ID único y escribirlo en el tag
+            // NO usar NDEF como identificador para evitar duplicados
             if (!tagId) {
-              // Generar nuevo ID único
+              // Generar nuevo ID único (timestamp + random para máxima unicidad)
               const newTagId = generateNewTagId()
               tagId = newTagId
               
-              // Escribir el ID en el tag NFC (usando el mismo reader activo)
+              console.log('⚠️ Serial number no disponible, generando ID único:', newTagId)
+              
+              // Escribir el ID único en el tag NFC
               try {
                 const encoder = new TextEncoder()
                 const message = {
@@ -310,7 +291,7 @@ export function useNFC() {
                 
                 // @ts-ignore - Web NFC API types
                 await ndef.write(message)
-                console.log('✅ ID generado y escrito en tag NFC:', newTagId)
+                console.log('✅ ID único escrito en tag NFC:', newTagId)
               } catch (writeError) {
                 console.warn('⚠️ No se pudo escribir ID en tag, pero se usará el ID generado:', newTagId, writeError)
                 // Continuar con el ID generado aunque falle la escritura
@@ -320,7 +301,7 @@ export function useNFC() {
             if (!tagId) {
               resolveOnce({
                 success: false,
-                error: 'No se pudo leer o generar el ID del tag'
+                error: 'No se pudo leer serial number o generar ID único del tag'
               }, 'onreading-no-tag-id')
               return
             }
