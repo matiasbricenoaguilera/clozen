@@ -247,7 +247,16 @@ export function useNFC() {
               }
             }
 
-            // ✅ PRIORIDAD 1: Usar serial number si está disponible (más único y confiable)
+            // ✅ DEBUG: Log para ver qué información está disponible
+            console.log('🔍 NFC Event Info:', {
+              hasSerialNumber: !!event.serialNumber,
+              serialNumber: event.serialNumber,
+              ndefContent: ndefContent,
+              eventKeys: Object.keys(event)
+            })
+
+            // ✅ PRIORIDAD 1: Intentar usar serial number del chip (más único)
+            // Nota: event.serialNumber puede no estar disponible en todos los navegadores
             if (event.serialNumber) {
               // Intentar convertir a formato MAC (más legible)
               tagId = generateMacLikeId(event.serialNumber)
@@ -256,11 +265,29 @@ export function useNFC() {
               if (!tagId) {
                 tagId = event.serialNumber
               }
+              
+              console.log('✅ Usando serial number:', tagId)
             }
 
-            // ✅ PRIORIDAD 2: Fallback a contenido NDEF (para tags antiguos sin serial number)
+            // ✅ PRIORIDAD 2: Si NO hay serial number Y el NDEF es formato MAC generado por nosotros,
+            // generar un nuevo ID basado en timestamp (para evitar duplicados)
             if (!tagId && ndefContent) {
-              tagId = ndefContent
+              // Verificar si el NDEF es un formato MAC (XX:XX:XX:XX:XX:XX) que podría ser de un tag previo
+              const isMacFormat = /^[0-9A-F]{2}(:[0-9A-F]{2}){5}$/i.test(ndefContent)
+              
+              if (isMacFormat) {
+                // Si es formato MAC, podría ser de un tag anterior que fue escrito
+                // Para evitar duplicados, generamos un nuevo ID basado en timestamp + contenido
+                // Esto asegura unicidad incluso si dos tags tienen el mismo NDEF
+                const timestamp = Date.now()
+                const contentHash = ndefContent.split(':').map(h => parseInt(h, 16)).join('')
+                tagId = `${timestamp.toString(16)}:${contentHash.substring(0, 10)}`
+                console.log('⚠️ NDEF es formato MAC, generando ID único:', tagId, 'desde:', ndefContent)
+              } else {
+                // Si NO es formato MAC, usar el NDEF como está (tags antiguos)
+                tagId = ndefContent
+                console.log('✅ Usando contenido NDEF:', tagId)
+              }
             }
 
             // ✅ PRIORIDAD 3: Si aún no hay ID, generar uno y escribirlo en el tag
