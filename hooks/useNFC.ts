@@ -42,7 +42,7 @@ export function useNFC() {
   useEffect(() => {
     // Verificar soporte cuando el componente se monta
     checkNFCSupport()
-  }, [checkNFCSupport, buildSingleTextMessage])
+  }, [checkNFCSupport])
 
   // ✅ MEJORAR: Agregar función para obtener información detallada de compatibilidad
   const getNFCSupportInfo = useCallback(() => {
@@ -328,7 +328,12 @@ export function useNFC() {
                 await ndef.write(message)
                 console.log('✅ ID único escrito en tag NFC:', newTagId)
               } catch (writeError) {
-                console.warn('⚠️ No se pudo escribir ID en tag, pero se usará el ID generado:', newTagId, writeError)
+                console.warn('⚠️ No se pudo escribir ID en tag, posible solo lectura:', writeError)
+                resolveOnce({
+                  success: false,
+                  error: 'No se pudo escribir en el tag NFC. Puede ser de solo lectura o estar bloqueado.'
+                }, 'onwriting-failed')
+                return
               }
             }
 
@@ -450,7 +455,7 @@ export function useNFC() {
           } catch (error) {
             resolve({
               success: false,
-              error: 'Error al escribir en el tag NFC'
+              error: 'No se pudo escribir en el tag NFC. Puede ser de solo lectura o estar bloqueado.'
             })
           }
         }
@@ -459,7 +464,7 @@ export function useNFC() {
           if (hasWritten) return
           resolve({
             success: false,
-            error: 'Error al acceder al tag NFC'
+            error: 'Error al acceder al tag NFC. Verifica si el tag permite escritura.'
           })
         }
 
