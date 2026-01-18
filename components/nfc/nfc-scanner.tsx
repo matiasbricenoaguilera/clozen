@@ -32,6 +32,7 @@ export function NFCScanner({
   const { isSupported, isReading, isWriting, readNFCTag, writeNFCTag, cancelNFC, getNFCSupportInfo } = useNFC()
   const [status, setStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [infoMessage, setInfoMessage] = useState('')
   const [detectedTagId, setDetectedTagId] = useState('')
   const [supportInfo, setSupportInfo] = useState<any>(null)
   const isScanningRef = useRef(false) // Prevenir múltiples escaneos simultáneos
@@ -59,6 +60,7 @@ export function NFCScanner({
 
     setStatus('scanning')
     setErrorMessage('')
+    setInfoMessage('')
     setDetectedTagId('')
 
     try {
@@ -66,6 +68,9 @@ export function NFCScanner({
         const result = await readNFCTag(skipExistenceCheck)
         if (result.success && result.tagId) {
           setDetectedTagId(result.tagId)
+          if (result.info) {
+            setInfoMessage(result.info)
+          }
           onSuccess(result.tagId)
           lastSuccessTimeRef.current = Date.now() // ✅ Registrar tiempo del éxito
           
@@ -76,6 +81,7 @@ export function NFCScanner({
               isScanningRef.current = false
               setStatus('scanning')
               setDetectedTagId('')
+              setInfoMessage('')
               handleStartScan()
             }, 1000) // Aumentado de 500ms a 1000ms para dar más tiempo de limpieza
           } else {
@@ -105,6 +111,7 @@ export function NFCScanner({
               setStatus('scanning')
               setErrorMessage('')
               setDetectedTagId('')
+              setInfoMessage('')
               handleStartScan()
             }, isRecentSuccess ? 1000 : 1000) // Mismo tiempo para ambos casos
           } else if (!isRecentSuccess) {
@@ -137,6 +144,7 @@ export function NFCScanner({
     await cancelNFC()
     setStatus('idle')
     setErrorMessage('')
+    setInfoMessage('')
     setDetectedTagId('')
   }
 
@@ -273,6 +281,12 @@ export function NFCScanner({
           <Alert variant="destructive">
             <XCircle className="h-4 w-4" />
             <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        {infoMessage && (
+          <Alert>
+            <AlertDescription>{infoMessage}</AlertDescription>
           </Alert>
         )}
 
