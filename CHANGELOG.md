@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Si el NDEF es inválido, se genera un ID nuevo y se escribe en el tag
   - Si el NDEF es válido pero está duplicado, se reescribe con un nuevo ID único
   - Evita duplicados cuando el navegador no expone `serialNumber`
+- **Crear Nuevo Tag NFC ahora siempre escribe un UUID único**: El flujo de escritura genera un ID válido antes de escribirlo, evitando reusar NDEF antiguos y duplicados
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado
