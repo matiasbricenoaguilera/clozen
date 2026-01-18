@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Aviso de tag solo lectura**: Se muestra un error claro si el tag no permite escritura
 - **Nueva sección Admin "Gestionar Tag"**: Herramienta para escanear, liberar y reescribir tags NFC desde el panel administrativo
 - **Verificación automática de escritura NFC**: Después de escribir, se vuelve a leer el tag y se valida que el ID quedó guardado
+- **Diagnóstico NDEF en Admin**: La sección Gestionar Tags ahora muestra registros NDEF en UTF‑8 y HEX para comparar valores
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado

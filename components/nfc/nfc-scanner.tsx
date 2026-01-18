@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useNFC } from '@/hooks/useNFC'
+import type { NFCReadResult } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +13,7 @@ interface NFCScannerProps {
   mode: 'read' | 'write'
   onSuccess: (tagId: string) => void
   onError?: (error: string) => void
+  onReadDetails?: (result: NFCReadResult) => void
   expectedTagId?: string // Para modo write
   title?: string
   description?: string
@@ -23,6 +25,7 @@ export function NFCScanner({
   mode,
   onSuccess,
   onError,
+  onReadDetails,
   expectedTagId,
   title,
   description,
@@ -71,6 +74,7 @@ export function NFCScanner({
           if (result.info) {
             setInfoMessage(result.info)
           }
+          onReadDetails?.(result)
           onSuccess(result.tagId)
           lastSuccessTimeRef.current = Date.now() // ✅ Registrar tiempo del éxito
           
