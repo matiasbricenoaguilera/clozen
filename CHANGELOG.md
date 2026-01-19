@@ -8,18 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Prioridad UTF-8 sobre serial number**: Se corrige la priorización para que el UTF-8 escrito (editable) tenga prioridad sobre el serial number (inmutable del hardware)
+  - Ahora la prioridad es: UTF-8 → Serial Number → HEX
+  - Esto permite sobrescribir tags con nuevos IDs sin que el serial number interfiera
+  - Solucionado: Tags con serial duplicado (ej: 35:33:3A:66:34:3A) ahora leen el UUID sobrescrito
 - **Decodificación correcta de NDEF text records**: Se corrige la lectura de registros NDEF para extraer solo el texto UTF-8, sin incluir el status byte ni el código de idioma
   - Ahora se saltan correctamente los primeros bytes (status + lang code) del NDEF text record
   - Esto permite que los registros UTF-8 sobrescritos se lean correctamente en todas las secciones
   - Solucionado: En "Incorporar prenda lavada" ahora se lee el UTF-8 en vez del HEX
 
 ### Changed
-- **Estrategia de IDs NFC simplificada y UTF-8 prioritaria**: 
-  - Prioridad 1: Usar `serialNumber` del chip NFC (si está disponible)
-  - Prioridad 2: Usar cualquier registro UTF-8 (sin filtros hex-like)
-  - Prioridad 3: Usar registro UTF-8 #2 si el #1 está duplicado
-  - Prioridad 4: Usar HEX solo si UTF-8 está vacío/null
-  - Se eliminaron filtros "hex-like" que causaban falsos positivos
+- **Estrategia de IDs NFC corregida**: 
+  - Prioridad 1: UTF-8 registro 1 (lo que escribiste, editable)
+  - Prioridad 2: UTF-8 registro 2 (si registro 1 está duplicado)
+  - Prioridad 3: Serial number del chip (solo si no hay UTF-8, inmutable)
+  - Prioridad 4: HEX (último recurso si no hay UTF-8 ni serial)
+  - UTF-8 tiene prioridad porque es editable y permite resolver duplicados de serial number
 - **Resaltado visual del registro usado**: En Admin → Gestionar Tags, el registro que se usó como ID se muestra con fondo verde y marca "✓ Usado como ID"
 - **Crear Nuevo Tag NFC ahora siempre escribe un UUID único**: El flujo de escritura genera un ID válido antes de escribirlo, evitando reusar NDEF antiguos y duplicados
 - **Lectura NDEF por registros con avisos**: Se lee el registro 1 (UTF‑8) y, si está duplicado, se usa el registro 2 con aviso al usuario
