@@ -218,16 +218,18 @@ export default function AdminTagsPage() {
                     </div>
                     {ndefRecords.ndefHexRecords?.[index] && (
                       <div 
-                        className={`p-2 rounded text-xs font-mono ${
+                        className={`p-2 rounded text-xs font-mono overflow-hidden ${
                           isHexSelected 
                             ? 'bg-green-100 dark:bg-green-900 border-2 border-green-500' 
                             : 'bg-muted'
                         }`}
                       >
                         <span className="text-muted-foreground">HEX {index + 1}: </span>
-                        {ndefRecords.ndefHexRecords[index]}
+                        <span className="break-all block mt-1">
+                          {ndefRecords.ndefHexRecords[index]}
+                        </span>
                         {isHexSelected && (
-                          <span className="ml-2 text-green-600 dark:text-green-400 font-bold">
+                          <span className="text-green-600 dark:text-green-400 font-bold block mt-2">
                             ✓ Usado como ID
                           </span>
                         )}

@@ -8,12 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Filtro por usuario en Mi Closet (solo admin)**: Los administradores ahora pueden filtrar prendas por usuario
+  - Nuevo selector de usuario en la barra de búsqueda
+  - Muestra el nombre completo o email del usuario
+  - Solo visible para usuarios con rol admin
+  - Se combina con los filtros existentes (búsqueda y tipo de prenda)
+- **Página FAQ en panel admin**: Nueva sección de preguntas frecuentes sobre NFC
+  - Accesible desde Admin → FAQ
+  - Explica cómo resolver tags NFC duplicados
+  - Información de compatibilidad de dispositivos
+  - Solución a errores comunes de escritura
+  - Preguntas frecuentes con respuestas detalladas
 - **FAQ sobre NFC (FAQ_NFC.md)**: Documentación completa sobre manejo de tags NFC duplicados
   - Explicación del problema de serial numbers duplicados
   - Guía paso a paso para resolver duplicados escribiendo UUIDs únicos
   - Explicación de la priorización UTF-8 > Serial > HEX
   - Preguntas frecuentes sobre compatibilidad y uso
   - Flujos de trabajo recomendados para tags nuevos y existentes
+
+### Changed
+- **Tipos de prenda ordenados alfabéticamente**: Lista de tipos de prenda reorganizada para facilitar búsqueda
+  - Ordenados de A-Z en el selector de agregar prenda
+  - Mejora la usabilidad al buscar tipos específicos
+- **Responsividad mejorada en Gestionar Tags**: Códigos HEX largos ahora se ajustan correctamente
+  - Eliminado desbordamiento horizontal de códigos HEX
+  - Textos con `break-all` para ajuste automático
+  - Mejor visualización en dispositivos móviles
+- **Gestión de errores NFC mejorada en modo continuo**: Los errores de reinicio del scanner ya no se muestran innecesariamente
+  - En "Organizar ropa lavada", los errores se ignoran si ya hay códigos agregados exitosamente
+  - Reduce confusión del usuario al ver mensajes de error después de escaneos exitosos
+  - Solo se muestran errores reales que requieren atención del usuario
 
 ### Fixed
 - **Lectura NDEF simplificada: Web NFC ya decodifica el header automáticamente**: Eliminada decodificación manual que causaba lecturas vacías
