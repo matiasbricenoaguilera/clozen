@@ -8,12 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Construcción manual completa de NDEF Text Record**: Se construye el payload NDEF según especificación NFC Forum RTD
+- **Lectura NDEF simplificada: Web NFC ya decodifica el header automáticamente**: Eliminada decodificación manual que causaba lecturas vacías
+  - Web NFC automáticamente quita el header NDEF (status byte + idioma) al leer
+  - Ahora leemos `record.data` directamente como texto UTF-8, sin saltar bytes
+  - Comportamiento asimétrico de Web NFC: escritura necesita header completo, lectura lo quita automáticamente
+  - Logs detallados del texto leído para debugging
+  - Solucionado: "Registro 1 UTF-8 (vacío)" al leer tags escritos con NFC Tools u otras apps
+- **Construcción manual completa de NDEF Text Record para escritura**: Se construye el payload NDEF según especificación NFC Forum RTD
   - Payload completo: [status byte][language code 'en'][texto UTF-8]
   - Status byte calculado correctamente (0x02 = UTF-8 + longitud idioma 2)
   - Formato 100% compatible con estándar NFC Forum Type 2 Tag
   - Logs detallados del payload construido para debugging
-  - Solucionado: "Registro 1 UTF-8 (vacío)" - ahora escribe formato NDEF Text válido y decodificable
 - **Escritura NFC simplificada sin verificación automática**: Eliminada la verificación posterior que causaba falsos negativos
   - Ahora confía en que `ndef.write()` solo resuelve si la escritura fue exitosa (comportamiento estándar de Web NFC)
   - Eliminados delays y lectura de verificación que causaban conflictos de timing
