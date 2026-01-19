@@ -8,11 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Verificación de escritura NFC mejorada**: Se agrega delay de 500ms antes de verificar y logs detallados para debugging
-  - Ahora espera a que el tag complete la escritura física antes de verificar
-  - Comparación más flexible: verifica tanto ID normalizado como exacto
-  - Mejor mensaje de error indicando qué se esperaba vs qué se leyó
-  - Solucionado: Reducidos falsos negativos de "No se pudo verificar el ID escrito"
+- **Verificación de escritura NFC corregida con detención del reader**: Se detiene el NDEFReader antes de verificar para evitar conflictos
+  - Detiene el reader activo después de escribir (`ndef.stop()`) antes de crear uno nuevo para verificar
+  - Delay aumentado de 500ms a 1500ms para tags que necesitan más tiempo de grabación física
+  - Evita conflicto de múltiples readers activos simultáneamente
+  - Logs detallados para debugging completo del proceso
+  - Solucionado: "No se pudo verificar el ID escrito" cuando el tag SÍ se escribió correctamente
 - **Escritura NDEF text record corregida**: Se corrige `buildSingleTextMessage` para escribir registros NDEF text completos con header válido (status byte + código de idioma + texto UTF-8)
   - Ahora los registros escritos son 100% compatibles con la lectura NDEF que espera este formato
   - Solucionado: "Escribir nuevo ID" en Admin → Gestionar Tags ahora funciona correctamente y se verifica automáticamente

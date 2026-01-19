@@ -563,8 +563,16 @@ export function useNFC() {
             await ndef.write(message)
             console.log('✅ Escritura completada, esperando antes de verificar...')
 
-            // ⏱️ Esperar 500ms para que el tag complete la escritura física
-            await new Promise(resolve => setTimeout(resolve, 500))
+            // 🛑 CRÍTICO: Detener el reader actual para evitar conflicto con la verificación
+            try { 
+              ndef.stop() 
+              console.log('🛑 Reader detenido para permitir verificación')
+            } catch (stopError) {
+              console.warn('⚠️ No se pudo detener reader:', stopError)
+            }
+            
+            // ⏱️ Esperar 1500ms para que el tag complete la escritura física
+            await new Promise(resolve => setTimeout(resolve, 1500))
 
             // ✅ Verificación automática: volver a leer y comprobar el ID escrito
             const verifyRecords = await readNdefTextRecordsOnce()
