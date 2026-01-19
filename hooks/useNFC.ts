@@ -561,20 +561,35 @@ export function useNFC() {
           try {
             // @ts-ignore - Web NFC API types
             await ndef.write(message)
+            console.log('✅ Escritura completada, esperando antes de verificar...')
+
+            // ⏱️ Esperar 500ms para que el tag complete la escritura física
+            await new Promise(resolve => setTimeout(resolve, 500))
 
             // ✅ Verificación automática: volver a leer y comprobar el ID escrito
-            const writtenId = normalizeNfcId(tagId)
             const verifyRecords = await readNdefTextRecordsOnce()
-            const normalized = verifyRecords.map((r) => normalizeNfcId(r))
+            console.log('🔍 Verificación - Registros leídos:', verifyRecords)
+            console.log('🔍 Verificación - ID esperado:', tagId)
 
-            if (!normalized.includes(writtenId)) {
+            // Comparar tanto normalizado como original (para flexibilidad)
+            const writtenId = normalizeNfcId(tagId)
+            const normalized = verifyRecords.map((r) => normalizeNfcId(r))
+            const matchesNormalized = normalized.includes(writtenId)
+            const matchesExact = verifyRecords.includes(tagId)
+            
+            console.log('🔍 Verificación - Normalizado:', { writtenId, normalized, matches: matchesNormalized })
+            console.log('🔍 Verificación - Exacto:', { matchesExact })
+
+            if (!matchesNormalized && !matchesExact) {
+              const readValues = verifyRecords.length > 0 ? verifyRecords.join(', ') : '(vacío)'
               resolve({
                 success: false,
-                error: 'No se pudo verificar el ID escrito. El tag pudo no haberse grabado.'
+                error: `No se pudo verificar el ID escrito. Esperado: "${tagId}", Leído: "${readValues}". El tag puede ser de solo lectura.`
               })
               return
             }
 
+            console.log('✅ Verificación exitosa!')
             resolve({
               success: true,
               tagId: tagId
