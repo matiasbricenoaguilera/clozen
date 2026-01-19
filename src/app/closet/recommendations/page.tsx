@@ -310,14 +310,14 @@ export default function RecommendationsPage() {
                           key={garment.id}
                           className="border rounded-lg p-3 hover:bg-muted/50 transition-colors"
                         >
-                          <div className="aspect-square bg-muted rounded-lg mb-2 flex items-center justify-center">
+                          <div className="aspect-[3/4] bg-muted rounded-lg mb-2 flex items-center justify-center">
                             {garment.image_url ? (
                               <Image
                                 src={garment.image_url}
                                 alt={garment.name}
-                                width={200}
-                                height={200}
-                                className="w-full h-full object-cover rounded-lg"
+                                width={128}
+                                height={171}
+                                className="w-full h-full object-contain rounded-lg"
                                 loading="lazy"
                               />
                             ) : (

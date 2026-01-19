@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle } from 'lucide-react'
+import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle, LogOut, LogIn } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
 import type { Garment, Box, WeatherData } from '@/types'
 
@@ -73,6 +73,11 @@ export default function ClosetPage() {
   const [assigningBox, setAssigningBox] = useState(false)
   const [hasEnoughSpace, setHasEnoughSpace] = useState(true)
   const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number } | null>(null)
+  const [showWithdrawScanner, setShowWithdrawScanner] = useState(false)
+  const [showIngressScanner, setShowIngressScanner] = useState(false)
+  const [scannedGarmentForIngress, setScannedGarmentForIngress] = useState<Garment | null>(null)
+  const [selectedBoxForIngress, setSelectedBoxForIngress] = useState<string>('')
+  const [ingressingGarment, setIngressingGarment] = useState(false)
 
   // Refs para optimizar escritura rápida de Scanner Keyboard
   const batchCodesRef = useRef<string>('')
@@ -523,6 +528,109 @@ export default function ClosetPage() {
   const closeFoundGarmentDialog = () => {
     setFoundGarment(null)
     setNfcError('')
+  }
+
+  // Función para retirar prenda escaneada por NFC
+  const handleWithdrawNFCScan = async (tagId: string) => {
+    try {
+      const result = await findEntityByNFCTag(tagId)
+      if (result && result.entityType === 'garment') {
+        const garment = result.entity as Garment
+        
+        // Verificar permisos
+        if (!userProfile) return
+        const isAdmin = userProfile.role === 'admin'
+        if (!isAdmin && garment.user_id !== userProfile.id) {
+          setNfcError('No tienes permiso para retirar esta prenda')
+          return
+        }
+
+        // Retirar la prenda
+        await withdrawGarment(garment.id)
+        setShowWithdrawScanner(false)
+        setNfcError('')
+        console.log('✅ Prenda retirada exitosamente')
+      } else {
+        setNfcError('No se encontró ninguna prenda asociada a este tag NFC.')
+      }
+    } catch (error) {
+      console.error('Error al retirar prenda:', error)
+      setNfcError('Error al retirar la prenda. Inténtalo de nuevo.')
+    }
+  }
+
+  // Función para ingresar prenda escaneada por NFC
+  const handleIngressNFCScan = async (tagId: string) => {
+    try {
+      const result = await findEntityByNFCTag(tagId)
+      if (result && result.entityType === 'garment') {
+        const garment = result.entity as Garment
+        setScannedGarmentForIngress(garment)
+        setShowIngressScanner(false)
+        setNfcError('')
+      } else {
+        setNfcError('No se encontró ninguna prenda asociada a este tag NFC.')
+      }
+    } catch (error) {
+      console.error('Error al escanear prenda:', error)
+      setNfcError('Error al escanear la prenda. Inténtalo de nuevo.')
+    }
+  }
+
+  // Función para confirmar ingreso de prenda a cajón
+  const handleConfirmIngress = async () => {
+    if (!scannedGarmentForIngress || !selectedBoxForIngress) {
+      setNfcError('Selecciona una caja')
+      return
+    }
+
+    setIngressingGarment(true)
+    setNfcError('')
+
+    try {
+      // Verificar capacidad de la caja
+      const { count: currentCount } = await supabase
+        .from('garments')
+        .select('*', { count: 'exact', head: true })
+        .eq('box_id', selectedBoxForIngress)
+        .eq('status', 'available')
+
+      const targetBox = boxes.find(b => b.id === selectedBoxForIngress)
+      const maxCapacity = targetBox?.max_capacity || 15
+      const currentBoxCount = currentCount || 0
+
+      if (currentBoxCount >= maxCapacity) {
+        setNfcError(`Esta caja está llena (máximo ${maxCapacity} prendas)`)
+        setIngressingGarment(false)
+        return
+      }
+
+      // Actualizar prenda: asignar cajón y cambiar status a available
+      const { error } = await supabase
+        .from('garments')
+        .update({
+          box_id: selectedBoxForIngress,
+          status: 'available',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', scannedGarmentForIngress.id)
+
+      if (error) throw error
+
+      // Refrescar datos
+      await fetchGarments()
+      
+      // Limpiar estado
+      setScannedGarmentForIngress(null)
+      setSelectedBoxForIngress('')
+      setShowIngressScanner(false)
+      console.log('✅ Prenda ingresada exitosamente')
+    } catch (error) {
+      console.error('Error al ingresar prenda:', error)
+      setNfcError('Error al ingresar la prenda. Inténtalo de nuevo.')
+    } finally {
+      setIngressingGarment(false)
+    }
   }
 
   // Función para normalizar códigos (igual que cuando se guardan)
@@ -1042,6 +1150,28 @@ export default function ClosetPage() {
         </div>
       </div>
 
+      {/* Botones de Acción Rápida */}
+      {userProfile && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <Button
+            onClick={() => setShowWithdrawScanner(true)}
+            className="w-full h-12 sm:h-14 text-base sm:text-lg"
+            variant="outline"
+          >
+            <LogOut className="h-5 w-5 mr-2" />
+            Retirar
+          </Button>
+          <Button
+            onClick={() => setShowIngressScanner(true)}
+            className="w-full h-12 sm:h-14 text-base sm:text-lg"
+            variant="default"
+          >
+            <LogIn className="h-5 w-5 mr-2" />
+            Ingresar
+          </Button>
+        </div>
+      )}
+
       {/* Weather and Forgotten Garments Section */}
       {userProfile && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -1064,14 +1194,14 @@ export default function ClosetPage() {
                 <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
                   {forgottenGarments.map(garment => (
                     <div key={garment.id} className="bg-white dark:bg-gray-800 rounded-lg p-2 sm:p-3 border shadow-sm">
-                      <div className="h-20 sm:h-24 bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
+                      <div className="aspect-[3/4] bg-muted rounded mb-1 sm:mb-2 flex items-center justify-center overflow-hidden">
                         {garment.image_url ? (
                           <Image
                             src={garment.image_url}
                             alt={garment.name}
                             width={96}
-                            height={96}
-                            className="w-full h-full object-cover rounded"
+                            height={128}
+                            className="w-full h-full object-contain rounded"
                             loading="lazy"
                           />
                         ) : (
@@ -1197,14 +1327,14 @@ export default function ClosetPage() {
               }}
             >
               <CardHeader className="pb-3">
-                <div className="h-32 bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
+                <div className="aspect-[3/4] bg-muted rounded-lg mb-3 flex items-center justify-center overflow-hidden relative">
                   {garment.image_url ? (
                     <Image
                       src={garment.image_url}
                       alt={garment.name}
                       width={128}
-                      height={128}
-                      className="w-full h-full object-cover rounded-lg"
+                      height={171}
+                      className="w-full h-full object-contain rounded-lg"
                       loading="lazy"
                     />
                   ) : (
@@ -1438,14 +1568,14 @@ export default function ClosetPage() {
                             className={`p-3 ${isInUse ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''}`}
                           >
                             <div className="flex items-center gap-3">
-                              <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                              <div className="w-16 aspect-[3/4] bg-muted rounded-lg flex items-center justify-center overflow-hidden">
                                 {garment.image_url ? (
                                   <Image
                                     src={garment.image_url}
                                     alt={garment.name}
                                     width={64}
-                                    height={64}
-                                    className="w-full h-full object-cover"
+                                    height={85}
+                                    className="w-full h-full object-contain"
                                   />
                                 ) : (
                                   <Shirt className="h-6 w-6 text-muted-foreground" />
@@ -1694,14 +1824,14 @@ export default function ClosetPage() {
           {foundGarment && (
             <div className="space-y-4">
               <div className="flex gap-4">
-                <div className="aspect-square w-24 bg-muted rounded-lg flex items-center justify-center">
+                <div className="aspect-[3/4] w-24 bg-muted rounded-lg flex items-center justify-center">
                   {foundGarment.image_url ? (
                     <Image
                       src={foundGarment.image_url}
                       alt={foundGarment.name}
                       width={96}
-                      height={96}
-                      className="w-full h-full object-cover rounded-lg"
+                      height={128}
+                      className="w-full h-full object-contain rounded-lg"
                     />
                   ) : (
                     <Shirt className="h-8 w-8 text-muted-foreground" />
@@ -1788,6 +1918,147 @@ export default function ClosetPage() {
             setEditingGarment(null)
           }}
         />
+      )}
+
+      {/* Scanner para Retirar */}
+      {showWithdrawScanner && (
+        <Dialog open={showWithdrawScanner} onOpenChange={setShowWithdrawScanner}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Retirar Prenda</DialogTitle>
+              <DialogDescription>
+                Escanea el tag NFC de la prenda que quieres retirar
+              </DialogDescription>
+            </DialogHeader>
+            <NFCScanner
+              mode="read"
+              onSuccess={handleWithdrawNFCScan}
+              onError={(error) => {
+                setNfcError(`Error NFC: ${error}`)
+              }}
+              title="Escanear Tag NFC para Retirar"
+              description="Acerca el tag NFC de la prenda que quieres retirar"
+            />
+            {nfcError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Scanner para Ingresar */}
+      {showIngressScanner && (
+        <Dialog open={showIngressScanner} onOpenChange={setShowIngressScanner}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Ingresar Prenda</DialogTitle>
+              <DialogDescription>
+                Escanea el tag NFC de la prenda que quieres ingresar
+              </DialogDescription>
+            </DialogHeader>
+            <NFCScanner
+              mode="read"
+              onSuccess={handleIngressNFCScan}
+              onError={(error) => {
+                setNfcError(`Error NFC: ${error}`)
+              }}
+              title="Escanear Tag NFC para Ingresar"
+              description="Acerca el tag NFC de la prenda que quieres ingresar"
+            />
+            {nfcError && (
+              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Modal para seleccionar cajón al ingresar */}
+      {scannedGarmentForIngress && (
+        <Dialog open={!!scannedGarmentForIngress} onOpenChange={(open) => {
+          if (!open) {
+            setScannedGarmentForIngress(null)
+            setSelectedBoxForIngress('')
+            setNfcError('')
+          }
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Ingresar Prenda a Cajón</DialogTitle>
+              <DialogDescription>
+                Selecciona el cajón donde quieres guardar esta prenda
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="font-medium mb-2">Prenda:</p>
+                <p className="text-sm text-muted-foreground">
+                  {scannedGarmentForIngress.name} ({scannedGarmentForIngress.type})
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="box-select" className="block text-sm font-medium mb-1">
+                  Cajón
+                </label>
+                <Select
+                  value={selectedBoxForIngress}
+                  onValueChange={setSelectedBoxForIngress}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un cajón" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boxes.map(box => {
+                      const count = box.garment_count ?? 0
+                      const maxCapacity = box.max_capacity || 15
+                      const isFull = count >= maxCapacity
+                      return (
+                        <SelectItem
+                          key={box.id}
+                          value={box.id}
+                          disabled={isFull}
+                          className={isFull ? 'opacity-50' : ''}
+                        >
+                          {box.name} ({count}/{maxCapacity}) {isFull && ' - LLENA'}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {nfcError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setScannedGarmentForIngress(null)
+                    setSelectedBoxForIngress('')
+                    setNfcError('')
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirmIngress}
+                  disabled={ingressingGarment || !selectedBoxForIngress}
+                >
+                  {ingressingGarment ? 'Ingresando...' : 'Confirmar'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )
