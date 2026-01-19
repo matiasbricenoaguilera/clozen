@@ -12,8 +12,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
+import { BarcodeScanner } from '@/components/barcode/barcode-scanner'
 import { DemoBanner } from '@/components/ui/demo-banner'
-import { ArrowLeft, Save, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle, Camera } from 'lucide-react'
 import type { Box, GarmentForm } from '@/types'
 
 const GARMENT_TYPES = [
@@ -81,6 +82,7 @@ export default function AddGarmentPage() {
   const [selectedUserId, setSelectedUserId] = useState<string>('') // Usuario seleccionado para la prenda
   const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
   const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -1303,39 +1305,66 @@ export default function AddGarmentPage() {
                   </div>
                 ) : nfcMode === 'barcode' ? (
                   <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="barcode">Código de Barras</Label>
-                      <Input
-                        id="barcode"
-                        value={barcodeCode}
-                        onChange={(e) => setBarcodeCode(e.target.value)}
-                        placeholder="Ej: 1234567890123"
-                        className="font-mono"
+                    {showBarcodeScanner ? (
+                      <BarcodeScanner
+                        onSuccess={(code) => {
+                          setBarcodeCode(code)
+                          setShowBarcodeScanner(false)
+                          checkBarcodeDuplicate(code)
+                        }}
+                        onError={(error) => {
+                          setError(`Error al escanear código de barras: ${error}`)
+                        }}
+                        onClose={() => setShowBarcodeScanner(false)}
+                        title="Escanear Código de Barras"
+                        description="Apunta la cámara hacia el código de barras de la etiqueta"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Ingresa el código de barras de la etiqueta de la prenda. Este código se usará para identificar la prenda durante la organización post-lavado.
-                      </p>
-                    </div>
-                    {barcodeDuplicate.exists && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>
-                          ⚠️ Este código de barras ya está registrado en la prenda: <strong>{barcodeDuplicate.garmentName}</strong>
-                        </AlertDescription>
-                      </Alert>
+                    ) : (
+                      <>
+                        <div>
+                          <Label htmlFor="barcode">Código de Barras</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="barcode"
+                              value={barcodeCode}
+                              onChange={(e) => setBarcodeCode(e.target.value)}
+                              placeholder="Ej: 1234567890123"
+                              className="font-mono flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setShowBarcodeScanner(true)}
+                            >
+                              <Camera className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Ingresa el código manualmente o escanéalo con la cámara
+                          </p>
+                        </div>
+                        {barcodeDuplicate.exists && (
+                          <Alert variant="destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>
+                              ⚠️ Este código de barras ya está registrado en la prenda: <strong>{barcodeDuplicate.garmentName}</strong>
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                        <div className="flex gap-2">
+                          <Button onClick={handleBarcodeSubmit} className="flex-1">
+                            Registrar Código
+                          </Button>
+                          <Button
+                            onClick={() => setNfcMode(null)}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </>
                     )}
-                    <div className="flex gap-2">
-                      <Button onClick={handleBarcodeSubmit} className="flex-1">
-                        Registrar Código
-                      </Button>
-                      <Button
-                        onClick={() => setNfcMode(null)}
-                        variant="outline"
-                        className="flex-1"
-                      >
-                        Cancelar
-                      </Button>
-                    </div>
                   </div>
                 ) : nfcMode ? (
                   <NFCScanner

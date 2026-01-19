@@ -12,7 +12,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X } from 'lucide-react'
+import { BarcodeScanner } from '@/components/barcode/barcode-scanner'
+import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X, Camera } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
 export default function AdminOrganizePage() {
@@ -47,6 +48,7 @@ export default function AdminOrganizePage() {
   
   // Refs para optimizar escritura rápida de Scanner Keyboard
   const batchCodesRef = useRef<string>('')
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -849,6 +851,129 @@ export default function AdminOrganizePage() {
                     Cerrar Scanner
                   </Button>
                 </div>
+              )}
+            </div>
+          ) : scanMode === 'barcode' ? (
+            <div className="space-y-4">
+              {showBarcodeScanner ? (
+                <BarcodeScanner
+                  onSuccess={(code) => {
+                    // Agregar código al campo batchCodes
+                    const currentCodes = batchCodes.trim()
+                    const newCode = code.trim()
+                    
+                    if (currentCodes) {
+                      setBatchCodes(`${currentCodes}/${newCode}`)
+                      batchCodesRef.current = `${currentCodes}/${newCode}`
+                    } else {
+                      setBatchCodes(newCode)
+                      batchCodesRef.current = newCode
+                    }
+                    
+                    setShowBarcodeScanner(false)
+                  }}
+                  onError={(error) => {
+                    setBatchError(`Error al escanear: ${error}`)
+                  }}
+                  onClose={() => setShowBarcodeScanner(false)}
+                  title="Escanear Código de Barras"
+                  description="Apunta la cámara hacia el código de barras"
+                  continuous={true}
+                />
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      📱 Códigos de Barras (separados por "/")
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={batchCodes}
+                        onChange={handleBatchCodesChange}
+                        onPaste={handleBatchCodesPaste}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            if (batchCodesRef.current.trim() && !searchingBatch) {
+                              searchBatchGarments()
+                            }
+                          }
+                        }}
+                        placeholder="Ingresa códigos o escanéalos"
+                        className="font-mono text-sm flex-1"
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setShowBarcodeScanner(true)}
+                        size="lg"
+                        title="Escanear con cámara"
+                      >
+                        <Camera className="h-5 w-5" />
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      💡 Puedes pegar múltiples códigos separados por "/", comas, espacios o saltos de línea. También puedes escanear con el botón 📷.
+                    </p>
+                    {batchCodes && (
+                      <div className="text-xs text-muted-foreground p-2 bg-muted rounded mt-2">
+                        <strong>Códigos detectados:</strong> {detectedCodesCount}
+                      </div>
+                    )}
+                  </div>
+
+                  {batchError && (
+                    <div className={`p-3 rounded-lg border ${
+                      batchError.includes('❌') 
+                        ? 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+                        : 'bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800'
+                    }`}>
+                      <p className={`text-sm ${
+                        batchError.includes('❌')
+                          ? 'text-red-700 dark:text-red-300'
+                          : 'text-yellow-700 dark:text-yellow-300'
+                      }`}>{batchError}</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={searchBatchGarments} 
+                      size="lg" 
+                      className="flex-1"
+                      disabled={searchingBatch || !batchCodes.trim()}
+                    >
+                      {searchingBatch ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Buscando...
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-4 w-4 mr-2" />
+                          Buscar Prendas
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      onClick={() => { 
+                        setScanMode(null)
+                        setBatchCodes('')
+                        batchCodesRef.current = ''
+                        setFoundGarmentsBatch([])
+                        setSelectedBoxForBatch('')
+                        setBatchError('')
+                        setError('')
+                        setSuccess('')
+                      }} 
+                      variant="outline" 
+                      size="lg"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
               )}
 
               {/* Lista de prendas encontradas */}
