@@ -176,7 +176,6 @@ export function useNFC() {
 
     // @ts-ignore - Web NFC API types
     const ndef = new NDEFReader()
-    const decoder = new TextDecoder()
     let timeoutId: NodeJS.Timeout | null = null
 
     try {
@@ -187,7 +186,14 @@ export function useNFC() {
             const records: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                records.push(decoder.decode(record.data))
+                // ✅ Decodificar correctamente NDEF text records
+                const data = new Uint8Array(record.data)
+                const statusByte = data[0]
+                const langCodeLength = statusByte & 0x3F
+                const textData = data.slice(1 + langCodeLength)
+                const textDecoder = new TextDecoder('utf-8')
+                const decodedText = textDecoder.decode(textData)
+                records.push(decodedText)
               }
             }
             resolve(records)
@@ -304,7 +310,6 @@ export function useNFC() {
 
           try {
             // Leer el contenido del tag
-            const decoder = new TextDecoder()
             let tagId = ''
 
             // Leer registros NDEF de texto (UTF-8)
@@ -312,7 +317,20 @@ export function useNFC() {
             const ndefHexRecords: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                ndefRecords.push(decoder.decode(record.data))
+                // ✅ Decodificar correctamente NDEF text records
+                // NDEF text record format: [status byte][idioma][texto]
+                const data = new Uint8Array(record.data)
+                
+                // El primer byte contiene flags y longitud del código de idioma
+                const statusByte = data[0]
+                const langCodeLength = statusByte & 0x3F // bits 0-5 = longitud del idioma
+                
+                // Saltar status byte (1) + código de idioma para obtener el texto real
+                const textData = data.slice(1 + langCodeLength)
+                const textDecoder = new TextDecoder('utf-8')
+                const decodedText = textDecoder.decode(textData)
+                
+                ndefRecords.push(decodedText)
                 ndefHexRecords.push(toHexString(record.data))
               }
             }

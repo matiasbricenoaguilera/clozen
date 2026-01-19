@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Decodificación correcta de NDEF text records**: Se corrige la lectura de registros NDEF para extraer solo el texto UTF-8, sin incluir el status byte ni el código de idioma
+  - Ahora se saltan correctamente los primeros bytes (status + lang code) del NDEF text record
+  - Esto permite que los registros UTF-8 sobrescritos se lean correctamente en todas las secciones
+  - Solucionado: En "Incorporar prenda lavada" ahora se lee el UTF-8 en vez del HEX
+
 ### Changed
 - **Estrategia de IDs NFC simplificada y UTF-8 prioritaria**: 
   - Prioridad 1: Usar `serialNumber` del chip NFC (si está disponible)
