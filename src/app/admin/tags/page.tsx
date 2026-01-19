@@ -190,17 +190,51 @@ export default function AdminTagsPage() {
           {ndefRecords?.ndefTextRecords && ndefRecords.ndefTextRecords.length > 0 && (
             <div className="space-y-2 rounded-lg border p-4">
               <p className="font-medium">Registros NDEF detectados</p>
-              {ndefRecords.ndefTextRecords.map((record, index) => (
-                <div key={`ndef-${index}`} className="text-sm">
-                  <span className="font-medium">Registro {index + 1} (UTF‑8): </span>
-                  <Badge variant="secondary">{record || '(vacío)'}</Badge>
-                  {ndefRecords.ndefHexRecords?.[index] && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      HEX: {ndefRecords.ndefHexRecords[index]}
+              {ndefRecords.ndefTextRecords.map((record, index) => {
+                const isUtf8Selected = 
+                  (ndefRecords.selectedSource === 'utf8-1' && index === 0) ||
+                  (ndefRecords.selectedSource === 'utf8-2' && index === 1)
+                const isHexSelected = ndefRecords.selectedSource === 'hex' && index === 0
+                
+                return (
+                  <div key={`ndef-${index}`} className="space-y-2">
+                    <div 
+                      className={`p-2 rounded text-sm ${
+                        isUtf8Selected 
+                          ? 'bg-green-100 dark:bg-green-900 border-2 border-green-500' 
+                          : 'bg-muted'
+                      }`}
+                    >
+                      <span className="font-medium">Registro {index + 1} (UTF‑8): </span>
+                      <Badge variant={isUtf8Selected ? 'default' : 'secondary'}>
+                        {record || '(vacío)'}
+                      </Badge>
+                      {isUtf8Selected && (
+                        <span className="ml-2 text-green-600 dark:text-green-400 font-bold">
+                          ✓ Usado como ID
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {ndefRecords.ndefHexRecords?.[index] && (
+                      <div 
+                        className={`p-2 rounded text-xs font-mono ${
+                          isHexSelected 
+                            ? 'bg-green-100 dark:bg-green-900 border-2 border-green-500' 
+                            : 'bg-muted'
+                        }`}
+                      >
+                        <span className="text-muted-foreground">HEX {index + 1}: </span>
+                        {ndefRecords.ndefHexRecords[index]}
+                        {isHexSelected && (
+                          <span className="ml-2 text-green-600 dark:text-green-400 font-bold">
+                            ✓ Usado como ID
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </CardContent>
