@@ -161,13 +161,36 @@ export function useNFC() {
   const buildSingleTextMessage = useCallback((value: string) => {
     const encoder = new TextEncoder()
     
-    // ✅ Web NFC API construye el header NDEF automáticamente
-    // Pasamos bytes (Uint8Array) del texto, la API agrega status byte + lang code
+    // Construir NDEF Text Record según especificación NFC Forum RTD
+    const languageCode = 'en'
+    const languageCodeBytes = encoder.encode(languageCode)
+    const textBytes = encoder.encode(value)
+    
+    // Status byte según NFC Forum RTD:
+    // - Bit 7: 0 = UTF-8 (1 = UTF-16)
+    // - Bit 6: siempre 0
+    // - Bits 5-0: longitud del código de idioma (0x02 para 'en')
+    const statusByte = languageCodeBytes.length // 0x02 para 'en'
+    
+    // Payload completo = [status byte][language code][text]
+    const payload = new Uint8Array(1 + languageCodeBytes.length + textBytes.length)
+    payload[0] = statusByte
+    payload.set(languageCodeBytes, 1)
+    payload.set(textBytes, 1 + languageCodeBytes.length)
+    
+    console.log('📝 NDEF Text Record construido:', {
+      statusByte: statusByte.toString(16),
+      languageCode,
+      textLength: textBytes.length,
+      payloadLength: payload.length,
+      payloadHex: Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join(' ')
+    })
+    
     return {
       records: [
         {
           recordType: 'text',
-          data: encoder.encode(value)  // Uint8Array del texto, no string directamente
+          data: payload
         }
       ]
     }
