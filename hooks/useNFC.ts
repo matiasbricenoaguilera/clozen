@@ -160,11 +160,28 @@ export function useNFC() {
   // Construir mensaje NDEF con un solo registro UTF-8
   const buildSingleTextMessage = useCallback((value: string) => {
     const encoder = new TextEncoder()
+    
+    // Construir NDEF text record correcto: [Status Byte][Lang Code][Text]
+    const langCode = 'en' // Código de idioma (2 caracteres)
+    const langCodeBytes = encoder.encode(langCode)
+    const textBytes = encoder.encode(value)
+    
+    // Status byte: 0x02 = UTF-8 encoding + longitud idioma 2
+    const statusByte = new Uint8Array([0x02])
+    
+    // Combinar: status byte + código de idioma + texto
+    const data = new Uint8Array(
+      statusByte.length + langCodeBytes.length + textBytes.length
+    )
+    data.set(statusByte, 0)
+    data.set(langCodeBytes, statusByte.length)
+    data.set(textBytes, statusByte.length + langCodeBytes.length)
+    
     return {
       records: [
         {
           recordType: 'text',
-          data: encoder.encode(value)
+          data: data
         }
       ]
     }

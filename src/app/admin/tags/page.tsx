@@ -153,7 +153,7 @@ export default function AdminTagsPage() {
               expectedTagId={mode === 'write' ? writeTagId : undefined}
               title={scannerTitle}
               description={scannerDescription}
-              skipExistenceCheck={mode === 'read'} // Permitir leer tags ya asociados en modo lectura
+              skipExistenceCheck={true} // Siempre permitir leer tags asociados (para gestionarlos)
             />
           )}
 
