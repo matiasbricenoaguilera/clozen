@@ -511,7 +511,7 @@ export function useNFC() {
     } finally {
       setIsReading(false)
     }
-  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage, toHexString, normalizeUtf8Id, isValidUtf8Id, isHexLikeUtf8])
+  }, [checkNFCSupport, generateMacLikeId, checkTagExists, generateNewTagId, normalizeNfcId, isValidNfcId, buildSingleTextMessage, toHexString])
 
   // Escribir tag NFC
   const writeNFCTag = useCallback(async (tagId: string): Promise<NFCWriteResult> => {
