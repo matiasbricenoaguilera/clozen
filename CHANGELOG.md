@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Admin → Gestionar Tags ahora permite escanear tags asociados**: Se agrega `skipExistenceCheck` en modo lectura para poder escanear y gestionar tags que ya están asociados a prendas/cajas
+  - Solucionado: "Escanear tag existente" ahora funciona correctamente con tags asociados
+  - Permite ver información, liberar y reescribir tags sin errores de "ya asociado"
 - **Prioridad UTF-8 sobre serial number**: Se corrige la priorización para que el UTF-8 escrito (editable) tenga prioridad sobre el serial number (inmutable del hardware)
   - Ahora la prioridad es: UTF-8 → Serial Number → HEX
   - Esto permite sobrescribir tags con nuevos IDs sin que el serial number interfiera
