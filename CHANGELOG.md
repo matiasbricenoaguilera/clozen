@@ -8,12 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Estrategia de IDs NFC basada en UUID**: Se usa `serialNumber` si está disponible; si no, se escribe/valida un ID hexadecimal único en el NDEF
-  - Prioridad 1: Usar `serialNumber` del chip NFC (formato MAC para legibilidad)
-  - Prioridad 2: Usar NDEF solo si es un ID hexadecimal válido (UUID sin guiones)
-  - Si el NDEF es inválido, se genera un ID nuevo y se escribe en el tag
-  - Si el NDEF es válido pero está duplicado, se reescribe con un nuevo ID único
-  - Evita duplicados cuando el navegador no expone `serialNumber`
+- **Estrategia de IDs NFC simplificada y UTF-8 prioritaria**: 
+  - Prioridad 1: Usar `serialNumber` del chip NFC (si está disponible)
+  - Prioridad 2: Usar cualquier registro UTF-8 (sin filtros hex-like)
+  - Prioridad 3: Usar registro UTF-8 #2 si el #1 está duplicado
+  - Prioridad 4: Usar HEX solo si UTF-8 está vacío/null
+  - Se eliminaron filtros "hex-like" que causaban falsos positivos
+- **Resaltado visual del registro usado**: En Admin → Gestionar Tags, el registro que se usó como ID se muestra con fondo verde y marca "✓ Usado como ID"
 - **Crear Nuevo Tag NFC ahora siempre escribe un UUID único**: El flujo de escritura genera un ID válido antes de escribirlo, evitando reusar NDEF antiguos y duplicados
 - **Lectura NDEF por registros con avisos**: Se lee el registro 1 (UTF‑8) y, si está duplicado, se usa el registro 2 con aviso al usuario
   - Si no hay ID válido, se genera y se informa que se está creando un nuevo código
@@ -22,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Nueva sección Admin "Gestionar Tag"**: Herramienta para escanear, liberar y reescribir tags NFC desde el panel administrativo
 - **Verificación automática de escritura NFC**: Después de escribir, se vuelve a leer el tag y se valida que el ID quedó guardado
 - **Diagnóstico NDEF en Admin**: La sección Gestionar Tags ahora muestra registros NDEF en UTF‑8 y HEX para comparar valores
-- **Prioridad UTF-8 en lectura NFC**: Se usa primero el registro UTF‑8 (y luego el registro 2 si hay duplicado); HEX queda como respaldo
-- **Preferencia por UTF-8 no hex-like**: Se priorizan registros UTF‑8 que no parezcan hex para evitar repetir IDs
 
 ### Added
 - **Validación en tiempo real de códigos duplicados**: Sistema de avisos visuales cuando se intenta usar un código NFC o de barras ya registrado

@@ -87,6 +87,7 @@ export interface NFCReadResult {
   ndefTextRecords?: string[]
   ndefHexRecords?: string[]
   ndefRecordCount?: number
+  selectedSource?: 'serial' | 'utf8-1' | 'utf8-2' | 'hex' | null
 }
 
 export interface NFCWriteResult {

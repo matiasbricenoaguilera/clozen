@@ -147,17 +147,6 @@ export function useNFC() {
     return /^[0-9A-F]{8,}$/.test(value)
   }, [])
 
-  const normalizeUtf8Id = useCallback((value: string) => {
-    return value.trim()
-  }, [])
-
-  const isValidUtf8Id = useCallback((value: string) => {
-    return value.trim().length > 0
-  }, [])
-
-  const isHexLikeUtf8 = useCallback((value: string) => {
-    return /^[0-9A-F:]+$/i.test(value.trim())
-  }, [])
 
   const toHexString = useCallback((data: ArrayBuffer | DataView | Uint8Array) => {
     const bytes = data instanceof Uint8Array
@@ -328,24 +317,22 @@ export function useNFC() {
               }
             }
 
+            // Normalizar UTF-8 (solo trim, sin filtros hex-like)
             const utf8Records = ndefRecords
-              .map((record) => normalizeUtf8Id(record))
-              .filter((record) => isValidUtf8Id(record))
+              .map((record) => record.trim())
+              .filter((record) => record.length > 0)
 
             const hexRecords = ndefHexRecords
               .map((record) => normalizeNfcId(record))
               .filter((record) => isValidNfcId(record))
 
-            const preferredUtf8 = utf8Records.filter((record) => !isHexLikeUtf8(record))
-            const utf8Candidates = preferredUtf8.length > 0 ? preferredUtf8 : utf8Records
-
             let infoMessage = ''
+            let selectedSource: 'serial' | 'utf8-1' | 'utf8-2' | 'hex' | null = null
 
             // ✅ DEBUG: Log para ver qué información está disponible
             console.log('🔍 NFC Event Info:', {
               hasSerialNumber: !!event.serialNumber,
               serialNumber: event.serialNumber,
-              ndefRecords,
               utf8Records,
               hexRecords,
               eventKeys: Object.keys(event)
@@ -361,29 +348,33 @@ export function useNFC() {
                 tagId = event.serialNumber
               }
 
+              selectedSource = 'serial'
               console.log('✅ Usando serial number:', tagId)
             }
 
-            // ✅ PRIORIDAD 2: Usar UTF-8 preferido (no hex-like)
-            if (!tagId && utf8Candidates[0]) {
-              tagId = utf8Candidates[0]
-              console.log('✅ Usando UTF-8 preferido:', tagId)
+            // ✅ PRIORIDAD 2: UTF-8 registro 1 (cualquier texto)
+            if (!tagId && utf8Records[0]) {
+              tagId = utf8Records[0]
+              selectedSource = 'utf8-1'
+              console.log('✅ Usando UTF-8 registro 1:', tagId)
             }
 
-            // ✅ Si hay duplicado en UTF-8, usar el siguiente UTF-8
-            if (!skipExistenceCheck && tagId) {
+            // ✅ Si hay duplicado en UTF-8 registro 1, usar UTF-8 registro 2
+            if (!skipExistenceCheck && tagId && selectedSource === 'utf8-1') {
               const tagCheck = await checkTagExists(tagId)
-              if (tagCheck.exists && utf8Candidates[1]) {
-                tagId = utf8Candidates[1]
-                infoMessage = 'Duplicado en UTF-8, leyendo el siguiente registro UTF-8.'
-                console.log('⚠️ UTF-8 duplicado, usando siguiente registro:', tagId)
+              if (tagCheck.exists && utf8Records[1]) {
+                tagId = utf8Records[1]
+                selectedSource = 'utf8-2'
+                infoMessage = 'Duplicado en UTF-8 registro 1, leyendo registro 2.'
+                console.log('⚠️ UTF-8 registro 1 duplicado, usando registro 2:', tagId)
               }
             }
 
-            // ✅ Respaldo: usar HEX si no hay UTF-8 válido
+            // ✅ PRIORIDAD 3: HEX como último recurso (si UTF-8 está vacío)
             if (!tagId && hexRecords[0]) {
               tagId = hexRecords[0]
-              infoMessage = 'UTF-8 no válido o repetido. Usando HEX como respaldo.'
+              selectedSource = 'hex'
+              infoMessage = 'UTF-8 vacío o null. Usando HEX como respaldo.'
               console.log('⚠️ Usando HEX como respaldo:', tagId)
             }
 
@@ -448,7 +439,8 @@ export function useNFC() {
               info: infoMessage,
               ndefTextRecords: ndefRecords,
               ndefHexRecords: ndefHexRecords,
-              ndefRecordCount: ndefRecords.length
+              ndefRecordCount: ndefRecords.length,
+              selectedSource: selectedSource
             }, 'onreading-success')
           } catch (error) {
             resolveOnce({
