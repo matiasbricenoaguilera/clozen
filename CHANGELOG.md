@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Botones de acción rápida "Retirar" e "Ingresar" en dashboard**: Nuevos botones responsivos para gestión rápida de prendas
+  - Botón "Retirar": Escanea NFC y retira prenda del cajón (status: 'in_use')
+  - Botón "Ingresar": Escanea NFC y permite elegir cajón donde guardar (status: 'available' + box_id)
+  - Modales con scanners NFC integrados
+  - Selector de cajón con validación de capacidad máxima
+  - Interfaz responsive para móvil y desktop
 - **Filtro por usuario en Mi Closet (solo admin)**: Los administradores ahora pueden filtrar prendas por usuario
   - Nuevo selector de usuario en la barra de búsqueda
   - Muestra el nombre completo o email del usuario
@@ -27,6 +33,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Flujos de trabajo recomendados para tags nuevos y existentes
 
 ### Changed
+- **WeatherCard compacto**: Clima ahora se muestra en una barra horizontal compacta
+  - Diseño más pequeño y eficiente
+  - Muestra temperatura, descripción, humedad y ciudad en una sola línea
+  - Iconos reducidos para mejor uso del espacio
+  - Mejor integración visual en el dashboard
+- **Mejora visualización de imágenes verticales**: Imágenes de prendas ahora se muestran mejor para fotos tomadas en vertical
+  - Cambio de `object-cover` a `object-contain` para mostrar imagen completa sin recortar
+  - Aspect ratio 3:4 (vertical) en lugar de cuadrado
+  - Aplicado en todas las secciones: Mi Closet, Recomendaciones, Prendas encontradas
+  - Mejor visualización de prendas fotografiadas con celular en posición vertical
 - **Tipos de prenda ordenados alfabéticamente**: Lista de tipos de prenda reorganizada para facilitar búsqueda
   - Ordenados de A-Z en el selector de agregar prenda
   - Mejora la usabilidad al buscar tipos específicos

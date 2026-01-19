@@ -89,17 +89,17 @@ export function WeatherCard({ onWeatherUpdate }: WeatherCardProps) {
   }
 
   const getWeatherIcon = (icon?: string) => {
-    if (!icon) return <Sun className="h-8 w-8" />
+    if (!icon) return <Sun className="h-5 w-5" />
     
-    if (icon.includes('01')) return <Sun className="h-8 w-8 text-yellow-500" />
-    if (icon.includes('02')) return <CloudSun className="h-8 w-8" />
-    if (icon.includes('03') || icon.includes('04')) return <Cloud className="h-8 w-8" />
-    if (icon.includes('09') || icon.includes('10')) return <CloudRain className="h-8 w-8 text-blue-500" />
-    if (icon.includes('11')) return <CloudRain className="h-8 w-8 text-purple-500" />
-    if (icon.includes('13')) return <CloudRain className="h-8 w-8 text-gray-400" />
-    if (icon.includes('50')) return <Wind className="h-8 w-8 text-gray-400" />
+    if (icon.includes('01')) return <Sun className="h-5 w-5 text-yellow-500" />
+    if (icon.includes('02')) return <CloudSun className="h-5 w-5" />
+    if (icon.includes('03') || icon.includes('04')) return <Cloud className="h-5 w-5" />
+    if (icon.includes('09') || icon.includes('10')) return <CloudRain className="h-5 w-5 text-blue-500" />
+    if (icon.includes('11')) return <CloudRain className="h-5 w-5 text-purple-500" />
+    if (icon.includes('13')) return <CloudRain className="h-5 w-5 text-gray-400" />
+    if (icon.includes('50')) return <Wind className="h-5 w-5 text-gray-400" />
     
-    return <Sun className="h-8 w-8" />
+    return <Sun className="h-5 w-5" />
   }
 
   return (
@@ -196,40 +196,24 @@ export function WeatherCard({ onWeatherUpdate }: WeatherCardProps) {
         )}
 
         {weather && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                {getWeatherIcon(weather.icon)}
-                <div>
-                  <div className="text-3xl font-bold">{weather.temperature}°C</div>
-                  <div className="text-sm text-muted-foreground capitalize">
+          <div className="flex items-center justify-between gap-3 py-1">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {getWeatherIcon(weather.icon)}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold">{weather.temperature}°C</span>
+                  <span className="text-xs text-muted-foreground capitalize truncate">
                     {weather.description}
-                  </div>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                  <span className="flex items-center gap-1">
+                    <Droplets className="h-3 w-3" />
+                    {weather.humidity}%
+                  </span>
+                  <span className="truncate">{weather.city}</span>
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-              <div className="flex items-center gap-2">
-                <Droplets className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Humedad</div>
-                  <div className="font-semibold">{weather.humidity}%</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Thermometer className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <div className="text-xs text-muted-foreground">Temperatura</div>
-                  <div className="font-semibold">{weather.temperature}°C</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <Badge variant="secondary" className="w-full justify-center py-1">
-                {weather.city}
-              </Badge>
             </div>
           </div>
         )}
