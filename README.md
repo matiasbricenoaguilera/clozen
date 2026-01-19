@@ -273,13 +273,19 @@ Visita `http://localhost:3000` para ver la aplicación.
 
 ### Requisitos para NFC
 - **Navegador**: Chrome para Android (Web NFC API)
-- **Tags**: NTAG213 compatibles
+- **Tags**: NTAG213, NTAG215, NTAG216 compatibles
 - **Permisos**: Habilitar NFC en el dispositivo
 
 ### Funcionalidades NFC
-1. **Escanear caja**: Localizar prendas por ubicación física
-2. **Asignar tag a caja**: Administrador asigna tag NFC a caja
-3. **Leer prenda**: Abrir detalles de prenda específica
+1. **Escanear tag**: Identificar prendas y cajas mediante tags NFC
+2. **Escribir UUID único**: Resolver tags duplicados escribiendo identificadores únicos
+3. **Gestionar tags**: Liberar, reescribir y administrar tags desde el panel admin
+4. **Organizar ropa lavada**: Escaneo continuo de múltiples prendas
+
+### ❓ ¿Tags NFC duplicados?
+Si encuentras tags con el mismo código serial, puedes escribir un UUID único en cada uno para diferenciarlos.
+
+**📖 Lee la [Guía Completa de NFC y resolución de duplicados](FAQ_NFC.md)**
 
 ## 🤖 APIs y Costos
 
