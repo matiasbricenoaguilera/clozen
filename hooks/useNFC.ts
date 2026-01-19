@@ -356,22 +356,8 @@ export function useNFC() {
               eventKeys: Object.keys(event)
             })
 
-            // ✅ PRIORIDAD 1: Usar serial number si está disponible
-            if (event.serialNumber) {
-              // Intentar convertir a formato MAC (más legible)
-              tagId = generateMacLikeId(event.serialNumber)
-
-              // Si la conversión falla, usar serial number directo
-              if (!tagId) {
-                tagId = event.serialNumber
-              }
-
-              selectedSource = 'serial'
-              console.log('✅ Usando serial number:', tagId)
-            }
-
-            // ✅ PRIORIDAD 2: UTF-8 registro 1 (cualquier texto)
-            if (!tagId && utf8Records[0]) {
+            // ✅ PRIORIDAD 1: UTF-8 registro 1 (lo que escribiste, editable)
+            if (utf8Records[0]) {
               tagId = utf8Records[0]
               selectedSource = 'utf8-1'
               console.log('✅ Usando UTF-8 registro 1:', tagId)
@@ -388,11 +374,26 @@ export function useNFC() {
               }
             }
 
-            // ✅ PRIORIDAD 3: HEX como último recurso (si UTF-8 está vacío)
+            // ✅ PRIORIDAD 2: Serial number (solo si no hay UTF-8, inmutable del chip)
+            if (!tagId && event.serialNumber) {
+              // Intentar convertir a formato MAC (más legible)
+              tagId = generateMacLikeId(event.serialNumber)
+
+              // Si la conversión falla, usar serial number directo
+              if (!tagId) {
+                tagId = event.serialNumber
+              }
+
+              selectedSource = 'serial'
+              infoMessage = 'Sin UTF-8. Usando serial number del chip.'
+              console.log('⚠️ Sin UTF-8, usando serial number:', tagId)
+            }
+
+            // ✅ PRIORIDAD 3: HEX como último recurso (si no hay UTF-8 ni serial)
             if (!tagId && hexRecords[0]) {
               tagId = hexRecords[0]
               selectedSource = 'hex'
-              infoMessage = 'UTF-8 vacío o null. Usando HEX como respaldo.'
+              infoMessage = 'Sin UTF-8 ni serial. Usando HEX como respaldo.'
               console.log('⚠️ Usando HEX como respaldo:', tagId)
             }
 
