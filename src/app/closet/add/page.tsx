@@ -12,7 +12,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { BarcodeScanner } from '@/components/barcode/barcode-scanner'
+import dynamic from 'next/dynamic'
+
+const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanner').then(mod => ({ default: mod.BarcodeScanner })), {
+  ssr: false,
+  loading: () => <div className="p-4 text-center text-muted-foreground">Cargando escáner de códigos de barras...</div>
+})
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { ArrowLeft, Save, AlertCircle, Camera } from 'lucide-react'
 import type { Box, GarmentForm } from '@/types'

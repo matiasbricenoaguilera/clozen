@@ -7,7 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Corregido error de permisos al retirar prendas**: Solucionado el problema donde los usuarios no podían retirar sus propias prendas
+  - Agregado campo `user_id` a la consulta en `findEntityByNFCTag()`
+  - Ahora la función verifica correctamente el propietario de la prenda antes de permitir retirarla
+  - Los usuarios normales pueden retirar solo sus prendas, los admins pueden retirar cualquier prenda
+- **Eliminados logs de debugging que causaban errores en consola**: Removidos todos los logs de debugging que intentaban conectarse a un servidor local inexistente
+  - Eliminados 10 bloques de código de logging de depuración en `hooks/useNFC.ts`
+  - La consola del navegador ya no muestra errores `ERR_CONNECTION_REFUSED` al usar NFC
+  - La funcionalidad NFC sigue funcionando correctamente sin estos logs
+- **Funcionalidad de retirar e ingresar prendas con NFC ahora funciona correctamente**: Mejorada la funcionalidad de retirar e ingresar prendas desde el perfil de usuario
+  - La función "Retirar" ahora efectivamente retira la prenda (status: 'in_use', box_id: null) y muestra mensaje de éxito
+  - La función "Ingresar" ahora muestra correctamente el selector de caja después de escanear
+  - Mejorado el manejo de errores con mensajes más descriptivos
+  - Mensajes de éxito se muestran en verde, errores en rojo
+  - La función `withdrawGarment` ahora lanza errores correctamente para mejor manejo
+  - Al retirar una prenda, se remueve automáticamente de la caja (box_id: null)
+- **Escáner NFC en perfil de usuario ahora lee UTF-8 correctamente**: Corregida la lectura de tags NFC en las funciones "Retirar" e "Ingresar"
+  - Agregado `skipExistenceCheck={true}` a ambos escáneres NFC en el perfil de usuario
+  - Ahora aplica la misma lógica de lectura UTF-8 que en la sección de administrador
+  - Solucionado: El escáner ahora lee correctamente los registros UTF-8 sin confundirse con el serial number
+  - Los tags ya asociados a prendas pueden ser leídos correctamente para retirar/ingresar
+- **Selector de caja en "Organizar Ropa Lavada" ahora visible para NFC**: Corregida la visualización del selector de caja y lista de prendas encontradas
+  - Movida la sección de prendas encontradas fuera del bloque condicional del modo de escaneo
+  - Ahora se muestra tanto para escaneo NFC como para códigos de barras
+  - Solucionado: Al escanear con NFC, ahora aparece la opción de asignar caja correctamente
+- **Escáneres se cierran automáticamente al buscar prendas**: Mejora en la UX de "Organizar Ropa Lavada"
+  - El modal del scanner NFC se cierra automáticamente después de presionar "Buscar Prenda"
+  - El scanner de códigos de barras también se cierra automáticamente
+  - Permite visualizar mejor la lista de prendas encontradas y el selector de caja
+
 ### Added
+- **Escáner de códigos de barras con cámara**: Nueva funcionalidad para leer códigos de barras usando la cámara del celular
+  - Componente `BarcodeScanner` usando la biblioteca `html5-qrcode`
+  - Soporte para múltiples formatos: EAN-13, EAN-8, CODE-128, CODE-39, CODE-93, UPC-A, UPC-E, ITF
+  - Modo continuo para escanear múltiples códigos en secuencia
+  - Prevención de escaneos duplicados (debounce de 1 segundo)
+  - Preferencia automática por cámara trasera en dispositivos móviles
+  - Integrado en "Agregar Prenda" con botón de cámara junto al input manual
+  - Integrado en "Organizar Ropa Lavada" con modo continuo para múltiples escaneos
+  - Interfaz intuitiva con instrucciones y feedback visual
 - **Botones de acción rápida "Retirar" e "Ingresar" en dashboard**: Nuevos botones responsivos para gestión rápida de prendas
   - Botón "Retirar": Escanea NFC y retira prenda del cajón (status: 'in_use')
   - Botón "Ingresar": Escanea NFC y permite elegir cajón donde guardar (status: 'available' + box_id)
@@ -56,12 +95,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Solo se muestran errores reales que requieren atención del usuario
 
 ### Fixed
-- **Lectura NDEF simplificada: Web NFC ya decodifica el header automáticamente**: Eliminada decodificación manual que causaba lecturas vacías
-  - Web NFC automáticamente quita el header NDEF (status byte + idioma) al leer
-  - Ahora leemos `record.data` directamente como texto UTF-8, sin saltar bytes
-  - Comportamiento asimétrico de Web NFC: escritura necesita header completo, lectura lo quita automáticamente
-  - Logs detallados del texto leído para debugging
-  - Solucionado: "Registro 1 UTF-8 (vacío)" al leer tags escritos con NFC Tools u otras apps
+- **Extracción correcta del texto NDEF saltando el header**: Corregida la lectura de registros NDEF Text Record para extraer solo el ID real
+  - Web NFC NO quita automáticamente el header NDEF al leer (incluye status byte + language code)
+  - Lógica aplicada directamente en el código de lectura (sin helper) para mayor simplicidad y confiabilidad
+  - El header NDEF Text Record incluye: [status byte][language code 'en'][texto UTF-8]
+  - Status byte: bits 5-0 = longitud del código de idioma (0x02 para 'en')
+  - Ahora extrae correctamente el ID real leyendo el status byte y saltando (1 byte status + N bytes language code)
+  - Aplicado en `readNFCTag` (lectura principal) y `readNdefTextRecordsOnce` (verificación)
+  - Solucionado: IDs leídos ahora coinciden con los escritos (ej: `BC655FA1301345D2B623E6DFE185D86D` en vez de `\x02enBC655FA1301345D2B623E6DFE185D86D`)
+  - Solucionado: Búsquedas en base de datos ahora funcionan correctamente
+  - Solucionado: Eliminados falsos duplicados causados por el header incluido
 - **Construcción manual completa de NDEF Text Record para escritura**: Se construye el payload NDEF según especificación NFC Forum RTD
   - Payload completo: [status byte][language code 'en'][texto UTF-8]
   - Status byte calculado correctamente (0x02 = UTF-8 + longitud idioma 2)

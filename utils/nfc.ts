@@ -22,6 +22,7 @@ export async function findEntityByNFCTag(tagId: string): Promise<NFCTagInfo | nu
         name,
         type,
         nfc_tag_id,
+        user_id,
         boxes (
           id,
           name

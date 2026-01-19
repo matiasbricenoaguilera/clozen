@@ -624,7 +624,7 @@ export function EditGarmentModal({
                         className={isFull ? 'opacity-50' : ''}
                       >
                         {box.name} {count > 0 && `(${count}/15)`} {isFull && ' - LLENA'}
-                      </SelectItem>
+                    </SelectItem>
                     )
                   })}
                 </SelectContent>

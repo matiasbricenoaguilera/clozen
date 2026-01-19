@@ -12,7 +12,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
-import { BarcodeScanner } from '@/components/barcode/barcode-scanner'
+import dynamic from 'next/dynamic'
+
+const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanner').then(mod => ({ default: mod.BarcodeScanner })), {
+  ssr: false,
+  loading: () => <div className="p-4 text-center text-muted-foreground">Cargando escáner de códigos de barras...</div>
+})
 import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X, Camera } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 
@@ -359,6 +364,8 @@ export default function AdminOrganizePage() {
       setBatchError(`Error al buscar las prendas: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     } finally {
       setSearchingBatch(false)
+      setNfcScanMode(null)  // ✅ Cerrar el scanner NFC modal
+      setShowBarcodeScanner(false)  // ✅ Cerrar el scanner de barcode
     }
   }, [batchCodes])
 
@@ -975,151 +982,6 @@ export default function AdminOrganizePage() {
                   </div>
                 </>
               )}
-
-              {/* Lista de prendas encontradas */}
-              {foundGarmentsBatch.length > 0 && (
-                <div className="space-y-4 border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold">
-                      Prendas Encontradas ({foundGarmentsBatch.length})
-                    </h3>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {foundGarmentsBatch.map(garment => {
-                      const isInUse = garment.status === 'in_use'
-                      return (
-                        <Card 
-                          key={garment.id} 
-                          className={`p-3 ${isInUse ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''}`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-                              {garment.image_url ? (
-                                <Image
-                                  src={garment.image_url}
-                                  alt={garment.name}
-                                  width={64}
-                                  height={64}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <Shirt className="h-6 w-6 text-muted-foreground" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium truncate">{garment.name}</p>
-                                {isInUse && (
-                                  <Badge variant="destructive" className="text-xs">
-                                    En Uso
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="text-sm text-muted-foreground">{garment.type}</p>
-                              {garment.nfc_tag_id && (
-                                <p className="text-xs text-muted-foreground font-mono">NFC: {garment.nfc_tag_id}</p>
-                              )}
-                              {garment.barcode_id && (
-                                <p className="text-xs text-muted-foreground font-mono">Barcode: {garment.barcode_id}</p>
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      )
-                    })}
-                  </div>
-
-                  {/* Selector de caja para asignar al lote */}
-                  {foundGarmentsBatch.length > 0 && (
-                    <div className="space-y-3 border-t pt-4">
-                      <div>
-                        <label className="text-sm font-medium mb-2 block">
-                          Asignar caja a todo el lote
-                        </label>
-                        {foundGarmentsBatch.filter(g => g.status === 'in_use').length > 0 && (
-                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
-                            ⚠️ {foundGarmentsBatch.filter(g => g.status === 'in_use').length} prenda(s) se restaurarán
-                          </p>
-                        )}
-                        <Select
-                          value={selectedBoxForBatch}
-                          onValueChange={(value) => {
-                            setSelectedBoxForBatch(value)
-                            const box = boxes.find(b => b.id === value)
-                            if (box) {
-                              const maxCapacity = getBoxMaxCapacity(box)
-                              const availableSpace = maxCapacity - (box.garment_count || 0)
-                              const willFit = foundGarmentsBatch.length <= availableSpace
-                              setSelectedBoxInfo({
-                                name: box.name,
-                                location: box.location || undefined,
-                                currentCount: box.garment_count || 0,
-                                availableSpace
-                              })
-                              setHasEnoughSpace(willFit)
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecciona una caja" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Sin caja</SelectItem>
-                            {boxes.map((box) => {
-                              const maxCapacity = getBoxMaxCapacity(box)
-                              const availableSpace = maxCapacity - (box.garment_count || 0)
-                              const isFull = (box.garment_count || 0) >= maxCapacity
-                              const willFit = foundGarmentsBatch.length <= availableSpace
-                              return (
-                                <SelectItem 
-                                  key={box.id} 
-                                  value={box.id}
-                                  disabled={isFull || !willFit}
-                                >
-                                  {box.name} {box.location ? `(${box.location})` : ''} - {box.garment_count || 0}/{maxCapacity}
-                                  {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
-                                </SelectItem>
-                              )
-                            })}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {selectedBoxInfo && selectedBoxForBatch && selectedBoxForBatch !== 'none' && (
-                        <Alert>
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>
-                            {hasEnoughSpace
-                              ? `✅ Asignarás ${foundGarmentsBatch.length} prenda(s) a la caja "${selectedBoxInfo.name}"${selectedBoxInfo.location ? ` (📍 ${selectedBoxInfo.location})` : ''}. Quedarán ${selectedBoxInfo.availableSpace - foundGarmentsBatch.length} espacios disponibles.`
-                              : `❌ No hay suficiente espacio. Disponible: ${selectedBoxInfo.availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas`
-                            }
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      <Button
-                        onClick={assignBoxToBatch}
-                        disabled={assigningBox || !selectedBoxForBatch || selectedBoxForBatch === 'none' || !hasEnoughSpace}
-                        size="lg"
-                        className="w-full"
-                      >
-                        {assigningBox ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Asignando...
-                          </>
-                        ) : (
-                          <>
-                            <Package className="h-4 w-4 mr-2" />
-                            Asignar Caja al Lote
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           ) : (
             // ✅ MANTENER: Input para código de barras
@@ -1162,6 +1024,149 @@ export default function AdminOrganizePage() {
                   size="lg"
                 >
                   Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Lista de prendas encontradas - Visible para NFC y Barcode */}
+          {foundGarmentsBatch.length > 0 && (
+            <div className="space-y-4 border-t pt-4 mt-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">
+                  Prendas Encontradas ({foundGarmentsBatch.length})
+                </h3>
+              </div>
+              
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {foundGarmentsBatch.map(garment => {
+                  const isInUse = garment.status === 'in_use'
+                  return (
+                    <Card 
+                      key={garment.id} 
+                      className={`p-3 ${isInUse ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50/50 dark:bg-yellow-950/20' : ''}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+                          {garment.image_url ? (
+                            <Image
+                              src={garment.image_url}
+                              alt={garment.name}
+                              width={64}
+                              height={64}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Shirt className="h-6 w-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium truncate">{garment.name}</p>
+                            {isInUse && (
+                              <Badge variant="destructive" className="text-xs">
+                                En Uso
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-muted-foreground">{garment.type}</p>
+                          {garment.nfc_tag_id && (
+                            <p className="text-xs text-muted-foreground font-mono">NFC: {garment.nfc_tag_id}</p>
+                          )}
+                          {garment.barcode_id && (
+                            <p className="text-xs text-muted-foreground font-mono">Barcode: {garment.barcode_id}</p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })}
+              </div>
+
+              {/* Selector de caja para asignar al lote */}
+              <div className="space-y-3 border-t pt-4">
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Asignar caja a todo el lote
+                  </label>
+                  {foundGarmentsBatch.filter(g => g.status === 'in_use').length > 0 && (
+                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
+                      ⚠️ {foundGarmentsBatch.filter(g => g.status === 'in_use').length} prenda(s) se restaurarán
+                    </p>
+                  )}
+                  <Select
+                    value={selectedBoxForBatch}
+                    onValueChange={(value) => {
+                      setSelectedBoxForBatch(value)
+                      const box = boxes.find(b => b.id === value)
+                      if (box) {
+                        const maxCapacity = getBoxMaxCapacity(box)
+                        const availableSpace = maxCapacity - (box.garment_count || 0)
+                        const willFit = foundGarmentsBatch.length <= availableSpace
+                        setSelectedBoxInfo({
+                          name: box.name,
+                          location: box.location || undefined,
+                          currentCount: box.garment_count || 0,
+                          availableSpace
+                        })
+                        setHasEnoughSpace(willFit)
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona una caja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin caja</SelectItem>
+                      {boxes.map((box) => {
+                        const maxCapacity = getBoxMaxCapacity(box)
+                        const availableSpace = maxCapacity - (box.garment_count || 0)
+                        const isFull = (box.garment_count || 0) >= maxCapacity
+                        const willFit = foundGarmentsBatch.length <= availableSpace
+                        return (
+                          <SelectItem 
+                            key={box.id} 
+                            value={box.id}
+                            disabled={isFull || !willFit}
+                          >
+                            {box.name} {box.location ? `(${box.location})` : ''} - {box.garment_count || 0}/{maxCapacity}
+                            {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {selectedBoxInfo && selectedBoxForBatch && selectedBoxForBatch !== 'none' && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {hasEnoughSpace
+                        ? `✅ Asignarás ${foundGarmentsBatch.length} prenda(s) a la caja "${selectedBoxInfo.name}"${selectedBoxInfo.location ? ` (📍 ${selectedBoxInfo.location})` : ''}. Quedarán ${selectedBoxInfo.availableSpace - foundGarmentsBatch.length} espacios disponibles.`
+                        : `❌ No hay suficiente espacio. Disponible: ${selectedBoxInfo.availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas`
+                      }
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <Button
+                  onClick={assignBoxToBatch}
+                  disabled={assigningBox || !selectedBoxForBatch || selectedBoxForBatch === 'none' || !hasEnoughSpace}
+                  size="lg"
+                  className="w-full"
+                >
+                  {assigningBox ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Asignando...
+                    </>
+                  ) : (
+                    <>
+                      <Package className="h-4 w-4 mr-2" />
+                      Asignar Caja al Lote
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
