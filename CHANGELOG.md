@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **FAQ sobre NFC (FAQ_NFC.md)**: Documentación completa sobre manejo de tags NFC duplicados
+  - Explicación del problema de serial numbers duplicados
+  - Guía paso a paso para resolver duplicados escribiendo UUIDs únicos
+  - Explicación de la priorización UTF-8 > Serial > HEX
+  - Preguntas frecuentes sobre compatibilidad y uso
+  - Flujos de trabajo recomendados para tags nuevos y existentes
+
 ### Fixed
 - **Lectura NDEF simplificada: Web NFC ya decodifica el header automáticamente**: Eliminada decodificación manual que causaba lecturas vacías
   - Web NFC automáticamente quita el header NDEF (status byte + idioma) al leer
