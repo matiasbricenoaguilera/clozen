@@ -445,7 +445,9 @@ export default function ClosetPage() {
 
   // Función para retirar una prenda (marcar como in_use)
   const withdrawGarment = async (garmentId: string) => {
-    if (!userProfile) return
+    if (!userProfile) {
+      throw new Error('Usuario no autenticado')
+    }
 
     try {
       const isAdmin = userProfile.role === 'admin'
@@ -453,7 +455,7 @@ export default function ClosetPage() {
       // 1. Obtener el valor actual de usage_count y user_id de la prenda
       const { data: currentGarment, error: fetchError } = await supabase
         .from('garments')
-        .select('usage_count, user_id')
+        .select('usage_count, user_id, name')
         .eq('id', garmentId)
         .single()
 
@@ -461,8 +463,7 @@ export default function ClosetPage() {
 
       // Si no es admin, verificar que la prenda pertenezca al usuario
       if (!isAdmin && currentGarment?.user_id !== userProfile.id) {
-        console.error('❌ No tienes permiso para retirar esta prenda')
-        return
+        throw new Error('No tienes permiso para retirar esta prenda')
       }
 
       // 2. Incrementar y actualizar
@@ -474,7 +475,8 @@ export default function ClosetPage() {
         .update({
           status: 'in_use',
           last_used: new Date().toISOString(),
-          usage_count: newUsageCount
+          usage_count: newUsageCount,
+          box_id: null // Remover de la caja al retirar
         })
         .eq('id', garmentId)
 
@@ -499,7 +501,7 @@ export default function ClosetPage() {
       console.log('✅ Prenda retirada exitosamente')
     } catch (error) {
       console.error('❌ Error al retirar prenda:', error)
-      // Aquí podríamos mostrar un toast de error
+      throw error // Re-lanzar el error para que lo maneje el llamador
     }
   }
 
@@ -537,25 +539,54 @@ export default function ClosetPage() {
       if (result && result.entityType === 'garment') {
         const garment = result.entity as Garment
         
+        // 🔍 DEBUG: Ver los IDs para diagnóstico
+        console.log('🔍 DEBUG Permisos:', {
+          userProfileId: userProfile?.id,
+          garmentUserId: garment.user_id,
+          garmentName: garment.name,
+          isAdmin: userProfile?.role === 'admin',
+          idsMatch: garment.user_id === userProfile?.id,
+          userIdType: typeof garment.user_id,
+          profileIdType: typeof userProfile?.id,
+          garmentComplete: garment
+        })
+        
         // Verificar permisos
-        if (!userProfile) return
+        if (!userProfile) {
+          setNfcError('Debes estar autenticado para retirar prendas')
+          return
+        }
         const isAdmin = userProfile.role === 'admin'
         if (!isAdmin && garment.user_id !== userProfile.id) {
+          console.error('❌ Verificación de permisos falló')
           setNfcError('No tienes permiso para retirar esta prenda')
           return
         }
 
         // Retirar la prenda
         await withdrawGarment(garment.id)
+        
+        // Cerrar el scanner y mostrar éxito
         setShowWithdrawScanner(false)
         setNfcError('')
+        
+        // Mostrar mensaje de éxito temporalmente
+        const successMessage = `✅ Prenda "${garment.name}" retirada exitosamente`
+        setNfcError(successMessage)
+        
+        // Limpiar mensaje después de 3 segundos
+        setTimeout(() => {
+          setNfcError('')
+        }, 3000)
+        
         console.log('✅ Prenda retirada exitosamente')
       } else {
         setNfcError('No se encontró ninguna prenda asociada a este tag NFC.')
       }
     } catch (error) {
       console.error('Error al retirar prenda:', error)
-      setNfcError('Error al retirar la prenda. Inténtalo de nuevo.')
+      const errorMessage = error instanceof Error ? error.message : 'Error al retirar la prenda. Inténtalo de nuevo.'
+      setNfcError(errorMessage)
     }
   }
 
@@ -565,6 +596,19 @@ export default function ClosetPage() {
       const result = await findEntityByNFCTag(tagId)
       if (result && result.entityType === 'garment') {
         const garment = result.entity as Garment
+        
+        // Verificar permisos
+        if (!userProfile) {
+          setNfcError('Debes estar autenticado para ingresar prendas')
+          return
+        }
+        const isAdmin = userProfile.role === 'admin'
+        if (!isAdmin && garment.user_id !== userProfile.id) {
+          setNfcError('No tienes permiso para ingresar esta prenda')
+          return
+        }
+        
+        // Cerrar el scanner y mostrar selector de caja
         setScannedGarmentForIngress(garment)
         setShowIngressScanner(false)
         setNfcError('')
@@ -573,7 +617,8 @@ export default function ClosetPage() {
       }
     } catch (error) {
       console.error('Error al escanear prenda:', error)
-      setNfcError('Error al escanear la prenda. Inténtalo de nuevo.')
+      const errorMessage = error instanceof Error ? error.message : 'Error al escanear la prenda. Inténtalo de nuevo.'
+      setNfcError(errorMessage)
     }
   }
 
@@ -1938,10 +1983,19 @@ export default function ClosetPage() {
               }}
               title="Escanear Tag NFC para Retirar"
               description="Acerca el tag NFC de la prenda que quieres retirar"
+              skipExistenceCheck={true}
             />
             {nfcError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+              <div className={`p-3 rounded-lg border ${
+                nfcError.startsWith('✅') 
+                  ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' 
+                  : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+              }`}>
+                <p className={`text-sm ${
+                  nfcError.startsWith('✅') 
+                    ? 'text-green-700 dark:text-green-300' 
+                    : 'text-red-700 dark:text-red-300'
+                }`}>{nfcError}</p>
               </div>
             )}
           </DialogContent>
@@ -1966,10 +2020,19 @@ export default function ClosetPage() {
               }}
               title="Escanear Tag NFC para Ingresar"
               description="Acerca el tag NFC de la prenda que quieres ingresar"
+              skipExistenceCheck={true}
             />
             {nfcError && (
-              <div className="p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
-                <p className="text-sm text-red-700 dark:text-red-300">{nfcError}</p>
+              <div className={`p-3 rounded-lg border ${
+                nfcError.startsWith('✅') 
+                  ? 'bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800' 
+                  : 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800'
+              }`}>
+                <p className={`text-sm ${
+                  nfcError.startsWith('✅') 
+                    ? 'text-green-700 dark:text-green-300' 
+                    : 'text-red-700 dark:text-red-300'
+                }`}>{nfcError}</p>
               </div>
             )}
           </DialogContent>

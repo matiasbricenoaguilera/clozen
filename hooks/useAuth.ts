@@ -47,28 +47,28 @@ export function useAuth() {
 
     // Crear la promesa y guardarla para deduplicación
     const profilePromise = (async () => {
-      try {
-        const queryPromise = supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .single()
+    try {
+      const queryPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single()
 
-        const { data, error } = await Promise.race([queryPromise, timeoutPromise])
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise])
 
-        if (error) {
-          console.warn('❌ [useAuth] Error fetching user profile:', error)
-          console.warn('❌ [useAuth] Error details:', {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint
-          })
-          
-          // Si el usuario no existe en la tabla users, podría ser un problema de RLS
-          // o el usuario no fue creado correctamente durante el registro
-          if (error.code === 'PGRST116') {
-            console.warn('⚠️ [useAuth] Usuario no encontrado en tabla users. Esto puede indicar un problema con el registro.')
+      if (error) {
+        console.warn('❌ [useAuth] Error fetching user profile:', error)
+        console.warn('❌ [useAuth] Error details:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint
+        })
+        
+        // Si el usuario no existe en la tabla users, podría ser un problema de RLS
+        // o el usuario no fue creado correctamente durante el registro
+        if (error.code === 'PGRST116') {
+          console.warn('⚠️ [useAuth] Usuario no encontrado en tabla users. Esto puede indicar un problema con el registro.')
             setUserProfile(null)
             setLoading(false)
             return null
@@ -84,26 +84,26 @@ export function useAuth() {
             setLoading(false)
             return null
           }
-        } else {
-          console.log('✅ [useAuth] Perfil obtenido:', {
-            id: data.id,
-            email: data.email,
-            role: data.role,
-            full_name: data.full_name
-          })
+      } else {
+        console.log('✅ [useAuth] Perfil obtenido:', {
+          id: data.id,
+          email: data.email,
+          role: data.role,
+          full_name: data.full_name
+        })
           
           // ✅ GUARDAR EN CACHÉ
           if (data) {
             profileCache.set(userId, { profile: data, timestamp: Date.now() })
           }
           
-          setUserProfile(data)
+        setUserProfile(data)
           setLoading(false)
           return data
-        }
-      } catch (error) {
-        console.error('❌ [useAuth] Excepción al obtener perfil:', error)
-        if (error instanceof Error && error.message === 'Timeout al obtener perfil') {
+      }
+    } catch (error) {
+      console.error('❌ [useAuth] Excepción al obtener perfil:', error)
+      if (error instanceof Error && error.message === 'Timeout al obtener perfil') {
           console.error('⏱️ [useAuth] Timeout: La consulta tardó más de 10 segundos.')
           
           if (retryCount < 2) {

@@ -226,7 +226,7 @@ export async function recommendOutfits(
       outfitScore += 20
       reasoning += ' - Perfecto para el clima actual'
     }
-
+    
     // Agregar razones de recomendación
     if (allReasons.length > 0) {
       reasoning += `. Razones: ${allReasons.slice(0, 3).join(', ')}`
@@ -252,20 +252,20 @@ export async function recommendOutfits(
       
       dressesWithScores.sort((a, b) => b.score - a.score)
       const topDress = dressesWithScores[0]
-      
+    
       let outfitScore = 60 + Math.floor(topDress.score / 3)
       let reasoning = `Vestido: ${topDress.garment.name} - Ideal para el clima actual`
-      
+    
       if (topDress.reasons.length > 0) {
         reasoning += `. ${topDress.reasons.slice(0, 2).join(', ')}`
       }
 
-      suggestions.push({
+    suggestions.push({
         garments: [topDress.garment],
         score: outfitScore,
-        reasoning,
-        weatherMatch: true
-      })
+      reasoning,
+      weatherMatch: true
+    })
     }
   }
 

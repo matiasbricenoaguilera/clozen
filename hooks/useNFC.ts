@@ -212,19 +212,38 @@ export function useNFC() {
             const records: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                // ✅ Web NFC ya decodifica el header automáticamente
                 let text = ''
+                
                 try {
-                  if (typeof record.data === 'string') {
-                    text = record.data
-                  } else {
-                    const decoder = new TextDecoder('utf-8')
-                    text = decoder.decode(record.data)
+                  // Obtener datos como Uint8Array
+                  const data = new Uint8Array(record.data)
+                  
+                  if (data.length > 0) {
+                    // Leer el status byte para obtener la longitud del código de idioma
+                    const statusByte = data[0]
+                    const languageCodeLength = statusByte & 0x3F // Bits 5-0
+                    
+                    // Verificar que tenga un header válido
+                    if (languageCodeLength > 0 && languageCodeLength <= 6 && data.length > languageCodeLength + 1) {
+                      // Saltar el header: 1 byte (status) + N bytes (language code)
+                      const payloadStart = 1 + languageCodeLength
+                      const payload = data.slice(payloadStart)
+                      const decoder = new TextDecoder('utf-8')
+                      text = decoder.decode(payload)
+                    } else {
+                      // Si no tiene header, decodificar todo
+                      const decoder = new TextDecoder('utf-8')
+                      text = decoder.decode(data)
+                    }
                   }
                 } catch (e) {
+                  console.warn('⚠️ Error decodificando record:', e)
                   text = ''
                 }
-                records.push(text)
+                
+                if (text) {
+                  records.push(text)
+                }
               }
             }
             resolve(records)
@@ -268,10 +287,6 @@ export function useNFC() {
 
   // Leer tag NFC
   const readNFCTag = useCallback(async (skipExistenceCheck: boolean = false): Promise<NFCReadResult> => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:141',message:'readNFCTag called',data:{skipExistenceCheck},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
-
     if (!checkNFCSupport()) {
       return {
         success: false,
@@ -290,22 +305,11 @@ export function useNFC() {
       // @ts-ignore - Web NFC API types
       ndef = new NDEFReader()
 
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:157',message:'NDEFReader created, calling scan',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-
       await ndef.scan()
 
       return new Promise((resolve) => {
         const resolveOnce = (result: NFCReadResult, source: string) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:164',message:'resolveOnce called',data:{resolved,source,success:result.success,error:result.error?.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-          // #endregion
-
           if (resolved) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:169',message:'resolveOnce blocked - already resolved',data:{source},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
             return // ✅ Prevenir múltiples resoluciones
           }
           
@@ -314,9 +318,6 @@ export function useNFC() {
           
           // Limpiar antes de resolver
           try { 
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:176',message:'Calling ndef.stop()',data:{source},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             ndef?.stop() 
           } catch {}
           if (timeoutId) clearTimeout(timeoutId)
@@ -327,18 +328,10 @@ export function useNFC() {
             ndef.onreadingerror = null
           } catch {}
           
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:183',message:'Resolving promise',data:{source,success:result.success},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-
           resolve(result)
         }
 
         ndef.onreading = async (event: any) => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:199',message:'onreading event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
-
           try {
             // Leer el contenido del tag
             let tagId = ''
@@ -346,34 +339,116 @@ export function useNFC() {
             // Leer registros NDEF de texto (UTF-8)
             const ndefRecords: string[] = []
             const ndefHexRecords: string[] = []
+            
+            // 🔍 DEBUG: Ver todos los records del mensaje
+            console.log('🔍 Mensaje NDEF completo:', {
+              totalRecords: event.message.records.length,
+              records: event.message.records.map((r: any) => ({
+                recordType: r.recordType,
+                mediaType: r.mediaType,
+                id: r.id,
+                encoding: r.encoding,
+                lang: r.lang,
+                dataLength: r.data?.length || r.data?.byteLength || 0
+              }))
+            })
+            
             for (const record of event.message.records) {
+              console.log('🔍 Procesando record:', {
+                recordType: record.recordType,
+                isText: record.recordType === 'text',
+                allProperties: Object.keys(record)
+              })
+              
               if (record.recordType === 'text') {
-                // ✅ Web NFC ya decodifica el header NDEF automáticamente
-                // Solo necesitamos leer el texto directamente
                 let text = ''
                 
                 try {
-                  // Intentar como string directo (algunos navegadores)
-                  if (typeof record.data === 'string') {
-                    text = record.data
+                  // Log para ver qué tipo de dato es record.data
+                  console.log('🔍 record.data tipo:', {
+                    type: typeof record.data,
+                    isUint8Array: record.data instanceof Uint8Array,
+                    isArrayBuffer: record.data instanceof ArrayBuffer,
+                    isDataView: record.data instanceof DataView,
+                    constructor: record.data?.constructor?.name,
+                    rawData: record.data
+                  })
+                  
+                  // Obtener datos como Uint8Array
+                  let data: Uint8Array
+                  
+                  if (record.data instanceof Uint8Array) {
+                    data = record.data
+                  } else if (record.data instanceof ArrayBuffer) {
+                    data = new Uint8Array(record.data)
+                  } else if (record.data instanceof DataView) {
+                    data = new Uint8Array(record.data.buffer)
+                  } else if (typeof record.data === 'string') {
+                    // Si es string, convertir a bytes
+                    const encoder = new TextEncoder()
+                    data = encoder.encode(record.data)
                   } else {
-                    // O decodificar todo el record.data como texto UTF-8
-                    // (Web NFC ya quitó el header, esto es solo texto)
-                    const decoder = new TextDecoder('utf-8')
-                    text = decoder.decode(record.data)
+                    // Último intento: forzar conversión
+                    data = new Uint8Array(record.data)
                   }
                   
-                  console.log('📖 Registro NDEF leído:', { 
-                    text, 
-                    length: text.length,
-                    dataType: typeof record.data 
+                  console.log('🔍 data después de conversión:', {
+                    length: data.length,
+                    first10Bytes: Array.from(data.slice(0, 10)).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' ')
                   })
+                  
+                  if (data.length > 0) {
+                    // Leer el status byte
+                    const statusByte = data[0]
+                    const languageCodeLength = statusByte & 0x3F // Bits 5-0
+                    
+                    console.log('🔍 NDEF Header:', {
+                      statusByte: `0x${statusByte.toString(16)}`,
+                      languageCodeLength,
+                      dataLength: data.length,
+                      minRequiredLength: 1 + languageCodeLength + 1
+                    })
+                    
+                    // Verificar que tenga un header válido
+                    if (languageCodeLength > 0 && languageCodeLength <= 6 && data.length > languageCodeLength + 1) {
+                      // Saltar el header
+                      const payloadStart = 1 + languageCodeLength
+                      const payload = data.slice(payloadStart)
+                      const decoder = new TextDecoder('utf-8')
+                      text = decoder.decode(payload)
+                      
+                      console.log('✅ NDEF: Header detectado y saltado:', {
+                        statusByte: `0x${statusByte.toString(16)}`,
+                        languageCodeLength,
+                        payloadStart,
+                        payloadLength: payload.length,
+                        extractedText: text
+                      })
+                    } else {
+                      // Si no tiene header válido, decodificar todo
+                      const decoder = new TextDecoder('utf-8')
+                      text = decoder.decode(data)
+                      
+                      console.log('⚠️ NDEF: Sin header válido, texto completo:', {
+                        dataLength: data.length,
+                        text: text
+                      })
+                    }
+                  }
                 } catch (e) {
-                  console.warn('⚠️ Error decodificando record:', e)
+                  console.error('❌ Error decodificando record:', e)
                   text = ''
                 }
                 
-                ndefRecords.push(text)
+                console.log('📖 Registro NDEF leído:', { 
+                  text, 
+                  length: text.length,
+                  dataType: typeof record.data
+                })
+                
+                if (text) {
+                  ndefRecords.push(text)
+                }
                 ndefHexRecords.push(toHexString(record.data))
               }
             }
@@ -513,15 +588,8 @@ export function useNFC() {
         }
 
         ndef.onreadingerror = () => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:268',message:'onreadingerror event fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-          // #endregion
-
           // ✅ Verificar flag ANTES de llamar resolveOnce (previene race conditions)
           if (resolved) {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:273',message:'onreadingerror ignored - already resolved',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             return
           }
 
@@ -534,10 +602,6 @@ export function useNFC() {
 
         // Timeout después de 30 segundos
         timeoutId = setTimeout(() => {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/1b961dcc-97f3-4efd-a753-8f991e64f97f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'useNFC.ts:265',message:'Timeout fired',data:{resolved},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-          // #endregion
-
           resolveOnce({
             success: false,
             error: 'Tiempo de espera agotado'
