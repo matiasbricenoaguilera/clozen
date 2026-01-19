@@ -8,11 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Escritura NDEF corregida: eliminar construcción manual de header**: La Web NFC API construye automáticamente el header NDEF, construirlo manualmente causa formato inválido
-  - Ahora `buildSingleTextMessage` pasa solo el texto plano a la API
-  - La API automáticamente agrega status byte + código de idioma + texto
-  - Construir el header manualmente causaba formato duplicado/inválido que los tags rechazaban
-  - Solucionado: "Registro 1 UTF-8 continúa vacío" - ahora la escritura funciona correctamente
+- **Escritura NDEF corregida: usar Uint8Array en vez de string**: Web NFC API requiere bytes (Uint8Array) en el campo data, no strings directamente
+  - Ahora `buildSingleTextMessage` usa `encoder.encode(value)` para convertir texto a bytes
+  - La API automáticamente agrega status byte + código de idioma al recibir bytes con recordType: 'text'
+  - Pasar string directamente causaba registros vacíos o formato inválido
+  - Solucionado: "Registros leídos: ['']" (vacío) - ahora escribe el UUID correctamente
+- **Validación mejorada de ndef.stop()**: Verifica que el método existe antes de llamarlo
+  - Evita error "TypeError: t.stop is not a function"
+  - Validación con `typeof ndef.stop === 'function'` antes de ejecutar
+  - Solucionado: Error al detener reader no bloquea la verificación
 - **Verificación de escritura NFC corregida con detención del reader**: Se detiene el NDEFReader antes de verificar para evitar conflictos
   - Detiene el reader activo después de escribir (`ndef.stop()`) antes de crear uno nuevo para verificar
   - Delay aumentado de 500ms a 1500ms para tags que necesitan más tiempo de grabación física

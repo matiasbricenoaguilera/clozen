@@ -159,13 +159,15 @@ export function useNFC() {
 
   // Construir mensaje NDEF con un solo registro UTF-8
   const buildSingleTextMessage = useCallback((value: string) => {
+    const encoder = new TextEncoder()
+    
     // ✅ Web NFC API construye el header NDEF automáticamente
-    // Solo pasamos el texto plano, la API agrega status byte + lang code
+    // Pasamos bytes (Uint8Array) del texto, la API agrega status byte + lang code
     return {
       records: [
         {
           recordType: 'text',
-          data: value  // Texto plano, sin header manual
+          data: encoder.encode(value)  // Uint8Array del texto, no string directamente
         }
       ]
     }
@@ -549,10 +551,14 @@ export function useNFC() {
 
             // 🛑 CRÍTICO: Detener el reader actual para evitar conflicto con la verificación
             try { 
-              ndef.stop() 
-              console.log('🛑 Reader detenido para permitir verificación')
+              if (ndef && typeof ndef.stop === 'function') {
+                ndef.stop()
+                console.log('🛑 Reader detenido para permitir verificación')
+              } else {
+                console.log('⚠️ Reader no tiene método stop o ya está detenido')
+              }
             } catch (stopError) {
-              console.warn('⚠️ No se pudo detener reader:', stopError)
+              console.log('⚠️ Error al detener reader (ignorado):', stopError)
             }
             
             // ⏱️ Esperar 1500ms para que el tag complete la escritura física
