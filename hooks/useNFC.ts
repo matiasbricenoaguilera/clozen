@@ -212,14 +212,19 @@ export function useNFC() {
             const records: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                // ✅ Decodificar correctamente NDEF text records
-                const data = new Uint8Array(record.data)
-                const statusByte = data[0]
-                const langCodeLength = statusByte & 0x3F
-                const textData = data.slice(1 + langCodeLength)
-                const textDecoder = new TextDecoder('utf-8')
-                const decodedText = textDecoder.decode(textData)
-                records.push(decodedText)
+                // ✅ Web NFC ya decodifica el header automáticamente
+                let text = ''
+                try {
+                  if (typeof record.data === 'string') {
+                    text = record.data
+                  } else {
+                    const decoder = new TextDecoder('utf-8')
+                    text = decoder.decode(record.data)
+                  }
+                } catch (e) {
+                  text = ''
+                }
+                records.push(text)
               }
             }
             resolve(records)
@@ -343,20 +348,32 @@ export function useNFC() {
             const ndefHexRecords: string[] = []
             for (const record of event.message.records) {
               if (record.recordType === 'text') {
-                // ✅ Decodificar correctamente NDEF text records
-                // NDEF text record format: [status byte][idioma][texto]
-                const data = new Uint8Array(record.data)
+                // ✅ Web NFC ya decodifica el header NDEF automáticamente
+                // Solo necesitamos leer el texto directamente
+                let text = ''
                 
-                // El primer byte contiene flags y longitud del código de idioma
-                const statusByte = data[0]
-                const langCodeLength = statusByte & 0x3F // bits 0-5 = longitud del idioma
+                try {
+                  // Intentar como string directo (algunos navegadores)
+                  if (typeof record.data === 'string') {
+                    text = record.data
+                  } else {
+                    // O decodificar todo el record.data como texto UTF-8
+                    // (Web NFC ya quitó el header, esto es solo texto)
+                    const decoder = new TextDecoder('utf-8')
+                    text = decoder.decode(record.data)
+                  }
+                  
+                  console.log('📖 Registro NDEF leído:', { 
+                    text, 
+                    length: text.length,
+                    dataType: typeof record.data 
+                  })
+                } catch (e) {
+                  console.warn('⚠️ Error decodificando record:', e)
+                  text = ''
+                }
                 
-                // Saltar status byte (1) + código de idioma para obtener el texto real
-                const textData = data.slice(1 + langCodeLength)
-                const textDecoder = new TextDecoder('utf-8')
-                const decodedText = textDecoder.decode(textData)
-                
-                ndefRecords.push(decodedText)
+                ndefRecords.push(text)
                 ndefHexRecords.push(toHexString(record.data))
               }
             }
