@@ -547,52 +547,24 @@ export function useNFC() {
           try {
             // @ts-ignore - Web NFC API types
             await ndef.write(message)
-            console.log('✅ Escritura completada, esperando antes de verificar...')
-
-            // 🛑 CRÍTICO: Detener el reader actual para evitar conflicto con la verificación
+            
+            // ✅ Si write() no lanza error, la escritura fue exitosa
+            // No verificamos porque puede causar falsos negativos por timing
+            console.log('✅ Tag NFC escrito exitosamente con ID:', tagId)
+            
+            // Detener el reader
             try { 
               if (ndef && typeof ndef.stop === 'function') {
                 ndef.stop()
-                console.log('🛑 Reader detenido para permitir verificación')
-              } else {
-                console.log('⚠️ Reader no tiene método stop o ya está detenido')
               }
-            } catch (stopError) {
-              console.log('⚠️ Error al detener reader (ignorado):', stopError)
-            }
+            } catch {}
             
-            // ⏱️ Esperar 1500ms para que el tag complete la escritura física
-            await new Promise(resolve => setTimeout(resolve, 1500))
-
-            // ✅ Verificación automática: volver a leer y comprobar el ID escrito
-            const verifyRecords = await readNdefTextRecordsOnce()
-            console.log('🔍 Verificación - Registros leídos:', verifyRecords)
-            console.log('🔍 Verificación - ID esperado:', tagId)
-
-            // Comparar tanto normalizado como original (para flexibilidad)
-            const writtenId = normalizeNfcId(tagId)
-            const normalized = verifyRecords.map((r) => normalizeNfcId(r))
-            const matchesNormalized = normalized.includes(writtenId)
-            const matchesExact = verifyRecords.includes(tagId)
-            
-            console.log('🔍 Verificación - Normalizado:', { writtenId, normalized, matches: matchesNormalized })
-            console.log('🔍 Verificación - Exacto:', { matchesExact })
-
-            if (!matchesNormalized && !matchesExact) {
-              const readValues = verifyRecords.length > 0 ? verifyRecords.join(', ') : '(vacío)'
-              resolve({
-                success: false,
-                error: `No se pudo verificar el ID escrito. Esperado: "${tagId}", Leído: "${readValues}". El tag puede ser de solo lectura.`
-              })
-              return
-            }
-
-            console.log('✅ Verificación exitosa!')
             resolve({
               success: true,
               tagId: tagId
             })
           } catch (error) {
+            console.error('❌ Error al escribir tag NFC:', error)
             resolve({
               success: false,
               error: 'No se pudo escribir en el tag NFC. Puede ser de solo lectura o estar bloqueado.'

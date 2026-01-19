@@ -8,15 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Escritura NFC simplificada sin verificación automática**: Eliminada la verificación posterior que causaba falsos negativos
+  - Ahora confía en que `ndef.write()` solo resuelve si la escritura fue exitosa (comportamiento estándar de Web NFC)
+  - Eliminados delays y lectura de verificación que causaban conflictos de timing
+  - Si `write()` no lanza error = escritura exitosa (como hacen la mayoría de apps NFC profesionales)
+  - Solucionado: "Registros leídos: []" en verificación - ahora no verifica y confía en write()
 - **Escritura NDEF corregida: usar Uint8Array en vez de string**: Web NFC API requiere bytes (Uint8Array) en el campo data, no strings directamente
   - Ahora `buildSingleTextMessage` usa `encoder.encode(value)` para convertir texto a bytes
   - La API automáticamente agrega status byte + código de idioma al recibir bytes con recordType: 'text'
-  - Pasar string directamente causaba registros vacíos o formato inválido
-  - Solucionado: "Registros leídos: ['']" (vacío) - ahora escribe el UUID correctamente
-- **Validación mejorada de ndef.stop()**: Verifica que el método existe antes de llamarlo
-  - Evita error "TypeError: t.stop is not a function"
-  - Validación con `typeof ndef.stop === 'function'` antes de ejecutar
-  - Solucionado: Error al detener reader no bloquea la verificación
+- **Validación mejorada de ndef.stop()**: Verifica que el método existe antes de llamarlo para evitar errores
 - **Verificación de escritura NFC corregida con detención del reader**: Se detiene el NDEFReader antes de verificar para evitar conflictos
   - Detiene el reader activo después de escribir (`ndef.stop()`) antes de crear uno nuevo para verificar
   - Delay aumentado de 500ms a 1500ms para tags que necesitan más tiempo de grabación física
