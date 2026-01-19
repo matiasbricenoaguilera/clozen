@@ -821,19 +821,16 @@ export default function AdminOrganizePage() {
                     mode="read"
                     onSuccess={handleNFCRead}
                     onError={(error) => {
-                      // ✅ Solo mostrar error si no es inmediatamente después de un éxito
-                      // El error se limpia en handleNFCRead cuando hay éxito, así que si llegamos aquí
-                      // es un error real (no un falso positivo de onreadingerror después de stop)
+                      // ✅ En modo continuo, solo mostrar errores reales (no de reinicio)
+                      // Ignorar errores si ya se agregaron códigos exitosamente
+                      if (batchCodes || batchCodesRef.current) {
+                        console.log('⚠️ Error NFC ignorado - hay códigos agregados:', error)
+                        return // No mostrar error si ya hay códigos
+                      }
+                      
                       setTimeout(() => {
-                        // Verificar que el error no haya sido limpiado por un éxito reciente
-                        setBatchError(prev => {
-                          // Si no hay error previo relacionado con NFC, establecer el nuevo
-                          if (!prev.includes('Error NFC')) {
-                            return `Error NFC: ${error}`
-                          }
-                          return prev
-                        })
-                      }, 100) // Pequeño delay para permitir que handleNFCRead limpie el error primero
+                        setBatchError(`Error NFC: ${error}`)
+                      }, 200)
                     }}
                     title="Escanear Tag NFC"
                     description="Escaneo continuo: acércate tags NFC y se agregarán automáticamente al campo de texto"

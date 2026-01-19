@@ -6,7 +6,7 @@ import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { ProgressBar } from '@/components/ui/progress-bar'
-import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home, Menu, X, Tag } from 'lucide-react'
+import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home, Menu, X, Tag, HelpCircle } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
@@ -107,6 +107,12 @@ export function Navbar() {
                     <Button variant="outline" size="sm" className="hidden xl:flex">
                       <Tag className="h-4 w-4 mr-2" />
                       Gestionar Tags
+                    </Button>
+                  </Link>
+                  <Link href="/admin/faq">
+                    <Button variant="outline" size="sm" className="hidden xl:flex">
+                      <HelpCircle className="h-4 w-4 mr-2" />
+                      FAQ
                     </Button>
                   </Link>
                 </>
@@ -214,6 +220,12 @@ export function Navbar() {
                       <Button variant="outline" className="w-full justify-start">
                         <Tag className="h-4 w-4 mr-2" />
                         Gestionar Tags
+                      </Button>
+                    </Link>
+                    <Link href="/admin/faq" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="outline" className="w-full justify-start">
+                        <HelpCircle className="h-4 w-4 mr-2" />
+                        FAQ
                       </Button>
                     </Link>
                   </>

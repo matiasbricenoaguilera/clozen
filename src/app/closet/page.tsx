@@ -53,6 +53,8 @@ export default function ClosetPage() {
   const [loadingBoxes, setLoadingBoxes] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedGarmentType, setSelectedGarmentType] = useState<string>('')
+  const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [users, setUsers] = useState<{ id: string; email: string; full_name?: string }[]>([])
   const [showNFCScanner, setShowNFCScanner] = useState(false)
   const [foundGarment, setFoundGarment] = useState<Garment | null>(null)
   const [nfcError, setNfcError] = useState('')
@@ -219,6 +221,24 @@ export default function ClosetPage() {
     }
   }, [isSupabaseConfigured])
 
+  // Cargar usuarios (solo para admin)
+  const fetchUsers = useCallback(async () => {
+    if (!isSupabaseConfigured || userProfile?.role !== 'admin') return
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, email, full_name')
+        .order('email')
+
+      if (error) throw error
+      setUsers(data || [])
+    } catch (error) {
+      console.error('Error fetching users:', error)
+      setUsers([])
+    }
+  }, [isSupabaseConfigured, userProfile])
+
   // ✅ Obtener tipos únicos de prendas para el selector
   const availableGarmentTypes = useMemo(() => {
     const types = new Set<string>()
@@ -239,9 +259,10 @@ export default function ClosetPage() {
         garment.name.toLowerCase().includes(lowerSearchTerm) ||
         garment.type.toLowerCase().includes(lowerSearchTerm)
       const matchesType = !selectedGarmentType || garment.type === selectedGarmentType
-      return matchesSearch && matchesType
+      const matchesUser = !selectedUserId || garment.user_id === selectedUserId
+      return matchesSearch && matchesType && matchesUser
     })
-  }, [garments, searchTerm, selectedGarmentType])
+  }, [garments, searchTerm, selectedGarmentType, selectedUserId])
 
   // Memoizar getBoxName para evitar recrear la función en cada render
   const getBoxName = useCallback((boxId: string | null) => {
@@ -263,9 +284,9 @@ export default function ClosetPage() {
   // Memoizar refreshData para evitar recrear la función
   const refreshData = useCallback(async () => {
     setLoading(true)
-    await Promise.all([fetchGarments(), fetchBoxes()])
+    await Promise.all([fetchGarments(), fetchBoxes(), fetchUsers()])
     setLoading(false)
-  }, [fetchGarments, fetchBoxes])
+  }, [fetchGarments, fetchBoxes, fetchUsers])
 
   // Memoizar fetchForgottenGarments para evitar recrear la función
   // DEBE estar antes del useEffect que lo usa
@@ -1116,6 +1137,22 @@ export default function ClosetPage() {
             <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
           ))}
         </select>
+        
+        {/* Filtro por usuario (solo admin) */}
+        {userProfile?.role === 'admin' && users.length > 0 && (
+          <select
+            value={selectedUserId}
+            onChange={(e) => setSelectedUserId(e.target.value)}
+            className="px-3 py-2 border border-input bg-background rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-auto sm:min-w-[200px]"
+          >
+            <option value="">Todos los usuarios</option>
+            {users.map(user => (
+              <option key={user.id} value={user.id}>
+                {user.full_name || user.email}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Garments Grid */}
