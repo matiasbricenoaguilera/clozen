@@ -54,6 +54,7 @@ export default function AdminOrganizePage() {
   // Refs para optimizar escritura rápida de Scanner Keyboard
   const batchCodesRef = useRef<string>('')
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const [barcodeScannerKey, setBarcodeScannerKey] = useState(0) // ✅ Key para forzar recreación del escáner
 
   useEffect(() => {
     loadData()
@@ -864,28 +865,41 @@ export default function AdminOrganizePage() {
             <div className="space-y-4">
               {showBarcodeScanner ? (
                 <BarcodeScanner
+                  key={barcodeScannerKey} // ✅ Forzar recreación del componente
                   onSuccess={(code) => {
-                    // Agregar código al campo batchCodes
-                    const currentCodes = batchCodes.trim()
+                    // ✅ Usar batchCodesRef.current para evitar problemas de closure
+                    const currentCodes = (batchCodesRef.current || '').trim()
                     const newCode = code.trim()
                     
                     if (currentCodes) {
-                      setBatchCodes(`${currentCodes}/${newCode}`)
-                      batchCodesRef.current = `${currentCodes}/${newCode}`
+                      const updatedCodes = `${currentCodes}/${newCode}`
+                      setBatchCodes(updatedCodes)
+                      batchCodesRef.current = updatedCodes
                     } else {
                       setBatchCodes(newCode)
                       batchCodesRef.current = newCode
                     }
                     
+                    // ✅ Cerrar automáticamente después de escanear (modo seguro)
                     setShowBarcodeScanner(false)
+                    // ✅ Aumentar timeout para dar más tiempo a limpieza completa
+                    setTimeout(() => {
+                      setBarcodeScannerKey(prev => prev + 1)
+                    }, 1000)
                   }}
                   onError={(error) => {
                     setBatchError(`Error al escanear: ${error}`)
                   }}
-                  onClose={() => setShowBarcodeScanner(false)}
+                  onClose={() => {
+                    setShowBarcodeScanner(false)
+                    // ✅ Aumentar timeout para dar más tiempo a limpieza completa
+                    setTimeout(() => {
+                      setBarcodeScannerKey(prev => prev + 1)
+                    }, 1000)
+                  }}
                   title="Escanear Código de Barras"
                   description="Apunta la cámara hacia el código de barras"
-                  continuous={true}
+                  continuous={false}
                 />
               ) : (
                 <>
@@ -913,7 +927,10 @@ export default function AdminOrganizePage() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setShowBarcodeScanner(true)}
+                        onClick={() => {
+                          setBarcodeScannerKey(prev => prev + 1) // ✅ Nueva key antes de abrir
+                          setShowBarcodeScanner(true)
+                        }}
                         size="lg"
                         title="Escanear con cámara"
                       >

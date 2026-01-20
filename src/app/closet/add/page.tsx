@@ -88,6 +88,7 @@ export default function AddGarmentPage() {
   const [nfcDuplicate, setNfcDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
   const [barcodeDuplicate, setBarcodeDuplicate] = useState<{ exists: boolean; garmentName?: string }>({ exists: false })
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
+  const [barcodeScannerKey, setBarcodeScannerKey] = useState(0) // ✅ Key para forzar recreación del escáner
 
   const [formData, setFormData] = useState<GarmentForm>({
     name: '',
@@ -1312,17 +1313,29 @@ export default function AddGarmentPage() {
                   <div className="space-y-4">
                     {showBarcodeScanner ? (
                       <BarcodeScanner
+                        key={barcodeScannerKey} // ✅ Forzar recreación del componente
                         onSuccess={(code) => {
                           setBarcodeCode(code)
                           setShowBarcodeScanner(false)
                           checkBarcodeDuplicate(code)
+                          // ✅ Aumentar timeout para dar más tiempo a limpieza completa
+                          setTimeout(() => {
+                            setBarcodeScannerKey(prev => prev + 1)
+                          }, 1000)
                         }}
                         onError={(error) => {
                           setError(`Error al escanear código de barras: ${error}`)
                         }}
-                        onClose={() => setShowBarcodeScanner(false)}
+                        onClose={() => {
+                          setShowBarcodeScanner(false)
+                          // ✅ Aumentar timeout para dar más tiempo a limpieza completa
+                          setTimeout(() => {
+                            setBarcodeScannerKey(prev => prev + 1)
+                          }, 1000)
+                        }}
                         title="Escanear Código de Barras"
                         description="Apunta la cámara hacia el código de barras de la etiqueta"
+                        continuous={false}
                       />
                     ) : (
                       <>
@@ -1339,7 +1352,10 @@ export default function AddGarmentPage() {
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => setShowBarcodeScanner(true)}
+                              onClick={() => {
+                                setBarcodeScannerKey(prev => prev + 1) // ✅ Nueva key antes de abrir
+                                setShowBarcodeScanner(true)
+                              }}
                             >
                               <Camera className="h-4 w-4" />
                             </Button>
