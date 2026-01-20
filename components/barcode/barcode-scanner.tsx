@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -26,52 +26,114 @@ export function BarcodeScanner({
   const [isScanning, setIsScanning] = useState(false)
   const [error, setError] = useState('')
   const [cameraId, setCameraId] = useState<string | null>(null)
+  const [isInitializing, setIsInitializing] = useState(false) // ✅ Prevenir múltiples inicializaciones
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const lastScannedCodeRef = useRef<string>('')
   const lastScanTimeRef = useRef<number>(0)
+
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current) {
+      try {
+        // Verificar si está escaneando antes de intentar detener
+        const state = scannerRef.current.getState()
+        if (state === 2) {  // 2 = SCANNING
+          await scannerRef.current.stop()
+        }
+        // Limpiar completamente la instancia
+        await scannerRef.current.clear()
+      } catch (err) {
+        console.error('Error stopping scanner:', err)
+        // Intentar limpiar de todos modos
+        try {
+          await scannerRef.current.clear()
+        } catch (clearErr) {
+          console.error('Error clearing scanner:', clearErr)
+        }
+      } finally {
+        scannerRef.current = null
+        setIsScanning(false)
+      }
+    }
+    
+    // Forzar liberación de todos los tracks de video/cámara
+    try {
+      const videoElement = document.querySelector('#barcode-reader video') as HTMLVideoElement
+      if (videoElement && videoElement.srcObject) {
+        const stream = videoElement.srcObject as MediaStream
+        stream.getTracks().forEach(track => {
+          track.stop()
+          console.log('🛑 Track de cámara detenido:', track.label)
+        })
+        videoElement.srcObject = null
+      }
+    } catch (err) {
+      console.error('Error liberando tracks de video:', err)
+    }
+    
+    // ✅ Liberar todos los MediaStreams globalmente como último recurso
+    try {
+      const allVideoElements = document.querySelectorAll('video')
+      allVideoElements.forEach(video => {
+        if (video.srcObject) {
+          const stream = video.srcObject as MediaStream
+          stream.getTracks().forEach(track => {
+            track.stop()
+            console.log('🛑 Stream global detenido:', track.label)
+          })
+          video.srcObject = null
+        }
+      })
+    } catch (err) {
+      console.error('Error liberando todos los streams:', err)
+    }
+  }, [])
 
   // Detener escáner al desmontar
   useEffect(() => {
     return () => {
       stopScanner()
     }
-  }, [])
-
-  const stopScanner = async () => {
-    if (scannerRef.current && isScanning) {
-      try {
-        await scannerRef.current.stop()
-        await scannerRef.current.clear()
-      } catch (err) {
-        console.error('Error stopping scanner:', err)
-      }
-      scannerRef.current = null
-      setIsScanning(false)
-    }
-  }
+  }, [stopScanner])
 
   const startScanner = async () => {
+    // ✅ Prevenir llamadas múltiples simultáneas
+    if (isInitializing) {
+      console.log('⚠️ Ya se está inicializando el escáner, ignorando...')
+      return
+    }
+    
     try {
+      setIsInitializing(true)
       setError('')
       
-      // Verificar permisos de cámara primero
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-        // Detener el stream inmediatamente, solo queríamos verificar permisos
-        stream.getTracks().forEach(track => track.stop())
-      } catch (permError: any) {
-        if (permError.name === 'NotAllowedError' || permError.name === 'PermissionDeniedError') {
-          throw new Error('Permisos de cámara denegados. Por favor, permite el acceso a la cámara en la configuración del navegador.')
-        } else if (permError.name === 'NotFoundError' || permError.name === 'DevicesNotFoundError') {
-          throw new Error('No se encontró ninguna cámara en el dispositivo.')
-        } else if (permError.name === 'NotReadableError' || permError.name === 'TrackStartError') {
-          throw new Error('La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara e intenta de nuevo.')
-        } else {
-          throw new Error(`Error de permisos: ${permError.message}`)
-        }
+      // Limpiar cualquier instancia existente primero
+      if (scannerRef.current) {
+        console.log('🔄 Limpiando instancia de escáner existente...')
+        await stopScanner()
+        // ✅ Aumentar delay para dar más tiempo a la liberación de recursos
+        await new Promise(resolve => setTimeout(resolve, 1000))
       }
       
+      // ✅ Verificar y limpiar todos los videos existentes en el DOM
+      const existingVideos = document.querySelectorAll('video')
+      if (existingVideos.length > 0) {
+        console.log('🧹 Limpiando videos existentes antes de iniciar...')
+        existingVideos.forEach(video => {
+          if (video.srcObject) {
+            const stream = video.srcObject as MediaStream
+            stream.getTracks().forEach(track => track.stop())
+            video.srcObject = null
+          }
+        })
+        // Dar tiempo para que se liberen los recursos
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      
+      // ✅ NO verificar permisos previamente - dejar que html5-qrcode maneje todo
+      // Esto evita condiciones de carrera donde dos procesos intentan acceder a la cámara
+      
       // Crear instancia del escáner
+      console.log('🎥 Creando nueva instancia de Html5Qrcode...')
       const html5QrCode = new Html5Qrcode('barcode-reader')
       scannerRef.current = html5QrCode
 
@@ -180,26 +242,38 @@ export function BarcodeScanner({
     } catch (err: any) {
       console.error('❌ Error starting barcode scanner:', err)
       
-      // Mensajes de error más descriptivos
+      // Mensajes de error más descriptivos y específicos
       let errorMsg = 'Error al iniciar el escáner de códigos de barras'
       
       if (err.message) {
-        errorMsg = err.message
+        // Si el error ya tiene un mensaje personalizado de los catch anteriores, usarlo
+        if (err.message.includes('No se pudo iniciar') || 
+            err.message.includes('Permisos de cámara') ||
+            err.message.includes('Cámara no encontrada') ||
+            err.message.includes('No se encontraron cámaras')) {
+          errorMsg = err.message
+        } else if (err.message.includes('Could not start video source')) {
+          errorMsg = 'La cámara no está disponible. Cierra todas las apps que usen la cámara (Chrome, cámara nativa, etc.) y recarga esta página.'
+        } else if (err.message.includes('Permission denied') || err.message.includes('PermissionDenied')) {
+          errorMsg = 'Permisos denegados. Ve a Configuración → Chrome → Permisos → Cámara → Permitir'
+        } else {
+          errorMsg = err.message
+        }
       } else if (err.name === 'NotAllowedError') {
         errorMsg = 'Permisos de cámara denegados. Por favor, permite el acceso a la cámara.'
       } else if (err.name === 'NotFoundError') {
         errorMsg = 'No se encontró ninguna cámara en el dispositivo.'
-      } else if (err.name === 'NotReadableError') {
-        errorMsg = 'La cámara está siendo usada por otra aplicación. Cierra otras apps que usen la cámara.'
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        errorMsg = 'La cámara está siendo usada por otra aplicación. Cierra todas las apps que usen la cámara y recarga esta página.'
       } else if (err.name === 'OverconstrainedError') {
         errorMsg = 'La cámara no soporta las configuraciones requeridas.'
-      } else if (err.toString().includes('getUserMedia')) {
-        errorMsg = 'Error al acceder a la cámara. Verifica los permisos del navegador.'
       }
       
       setError(errorMsg)
       onError?.(errorMsg)
       setIsScanning(false)
+    } finally {
+      setIsInitializing(false)
     }
   }
 
@@ -253,9 +327,13 @@ export function BarcodeScanner({
 
       <div className="flex gap-2">
         {!isScanning ? (
-          <Button onClick={handleStart} className="flex-1">
+          <Button 
+            onClick={handleStart} 
+            className="flex-1"
+            disabled={isInitializing}
+          >
             <Camera className="h-4 w-4 mr-2" />
-            Iniciar Escaneo
+            {isInitializing ? 'Inicializando...' : 'Iniciar Escaneo'}
           </Button>
         ) : (
           <Button onClick={handleStop} variant="destructive" className="flex-1">

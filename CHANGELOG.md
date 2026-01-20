@@ -8,6 +8,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Corregida liberación de recursos de cámara en escáner de códigos de barras (Solución Definitiva v2)**: Solucionado completamente el problema donde la cámara no se liberaba correctamente y el campo de texto no era editable
+  - **Componente BarcodeScanner** (`components/barcode/barcode-scanner.tsx`):
+    - **CRÍTICO**: Removida verificación previa de permisos con `getUserMedia()` que causaba conflictos
+    - Ahora `html5-qrcode` maneja TODOS los permisos y acceso a la cámara directamente
+    - Esto elimina la condición de carrera donde dos procesos intentaban acceder a la cámara simultáneamente
+    - **Agregado estado `isInitializing`** para prevenir múltiples inicializaciones simultáneas
+    - **Botón "Iniciar Escaneo" ahora se deshabilita** durante la inicialización, mostrando "Inicializando..."
+    - **Limpieza proactiva**: Verifica y limpia TODOS los videos existentes en el DOM antes de iniciar
+    - Aumentado delay de limpieza de 500ms a **1000ms** para dar más tiempo a la liberación de recursos
+    - Delay adicional de 500ms después de limpiar videos existentes
+    - Convertida `stopScanner()` a `useCallback` para prevenir recreaciones innecesarias
+    - Mejorada liberación de recursos: ahora detiene TODOS los MediaStreams globalmente como último recurso
+    - Agregada limpieza de todos los elementos `<video>` en el DOM, no solo el del escáner
+    - `useEffect` de cleanup ahora incluye `stopScanner` en dependencias correctamente
+    - Mejorados mensajes de error para ser más específicos y útiles
+  - **Página de Organizar** (`src/app/admin/organize/page.tsx`):
+    - **CRÍTICO**: Corregido problema de closure en `onSuccess` del escáner
+    - Ahora usa `batchCodesRef.current` en lugar de `batchCodes` para obtener el valor más actualizado
+    - Esto resuelve el problema donde el campo no era editable y el código volvía a aparecer
+    - Aumentados timeouts de 500ms a **1000ms** en `onSuccess` y `onClose`
+  - **Página Agregar Prenda** (`src/app/closet/add/page.tsx`):
+    - Aumentados timeouts de 500ms a **1000ms** en `onSuccess` y `onClose`
+  - **Solucionado**: Campo de códigos ahora es completamente editable sin que el código escaneado vuelva a aparecer
+  - **Solucionado**: Ya no aparece el error "La cámara está siendo usada por otra aplicación" o "NotReadableError"
+  - **Solucionado**: La cámara se libera completamente entre escaneos con tiempos más generosos
+  - **Solucionado**: Prevención de doble-clicks y múltiples inicializaciones simultáneas
+  - **Página de Organizar** (`src/app/admin/organize/page.tsx`):
+    - Cambiado a **modo seguro**: `continuous={false}` para cierre automático después de cada escaneo
+    - El escáner se cierra automáticamente después de escanear cada código
+    - Aumentado timeout de key de 100ms a 500ms para dar tiempo a limpieza completa
+    - Key se incrementa tanto en `onSuccess` como en `onClose` para forzar recreación limpia
+    - Key se incrementa antes de abrir el escáner para garantizar instancia fresca
+  - **Página Agregar Prenda** (`src/app/closet/add/page.tsx`):
+    - Agregado estado `barcodeScannerKey` para forzar recreación del componente
+    - Implementada misma lógica segura con timeouts de 500ms
+    - `continuous={false}` explícito para comportamiento predecible
+  - **Solucionado**: Campo de códigos ahora es completamente editable (no se bloquea por el escáner)
+  - **Solucionado**: Ya no aparece el error "La cámara está siendo usada por otra aplicación"
+  - **Solucionado**: La cámara se libera completamente entre escaneos
+  - **Nota**: Para escanear múltiples códigos, ahora hay que presionar el botón 📷 cada vez (más seguro y estable)
 - **Corregido error de permisos al retirar prendas**: Solucionado el problema donde los usuarios no podían retirar sus propias prendas
   - Agregado campo `user_id` a la consulta en `findEntityByNFCTag()`
   - Ahora la función verifica correctamente el propietario de la prenda antes de permitir retirarla
