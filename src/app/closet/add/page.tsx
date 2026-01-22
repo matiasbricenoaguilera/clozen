@@ -45,6 +45,7 @@ const GARMENT_TYPES = [
   'polera',
   'polerón',
   'ropa de casa',
+  'ropa de trabajo',
   'ropa deportiva',
   'ropa interior',
   'sandalias',

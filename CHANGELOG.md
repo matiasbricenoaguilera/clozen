@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Búsqueda de outfits similares de Pinterest**: Nueva funcionalidad para encontrar outfits similares a imágenes de Pinterest usando Google Vision
+  - **MEJORADO**: Sistema de búsqueda más flexible y preciso
+  - Mapeo de tipos mejorado: soporta más términos y búsqueda parcial
+  - Comparación de colores mejorada: soporta nombres de colores (azul, rojo, etc.) y códigos hex
+  - Umbrales de similitud ajustados: de 30 a 15 para encontrar más coincidencias
+  - Búsqueda de respaldo: si no encuentra matches, busca con umbrales más bajos
+  - Logging de depuración: muestra en consola qué detecta y qué encuentra
+  - Mejor scoring: sistema de puntos más flexible que considera tipo, color y palabras comunes
+  - Componente `PinterestOutfitAnalyzer` para subir imágenes o ingresar URLs de Pinterest
+  - Análisis de imágenes con Google Vision API: detecta prendas, colores dominantes y estilos
+  - Búsqueda inteligente de outfits similares en el closet del usuario basada en tipo y color
+  - Sistema de scoring de similitud que compara prendas detectadas con el closet
+  - Integrado en la página de Recomendaciones
+  - Muestra análisis detallado: prendas detectadas, colores dominantes y estilo
+  - Permite usar outfits encontrados directamente desde los resultados
+  - Soporte para subir archivos de imagen o ingresar URLs de imágenes públicas
+  - No requiere API de Pinterest, solo Google Vision (ya configurada)
+- **Tipo de prenda "Ropa de trabajo"**: Nuevo tipo de prenda disponible en el sistema
+  - Agregado a la lista de tipos de prenda en el formulario de agregar prendas
+  - Las prendas de tipo "ropa de trabajo" NO se incluyen en las recomendaciones automáticas
+  - Útil para separar ropa de trabajo de ropa casual/de uso diario
 - **Escáner NFC para seleccionar cajas automáticamente**: Nueva funcionalidad para escanear tags NFC de cajas al asignar prendas lavadas
   - Botón "Escanear NFC" junto al selector de cajas en "Organizar Ropa Lavada"
   - Escaneo automático de tags NFC asociados a cajas
@@ -16,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Selección automática de la caja al escanear exitosamente
   - Mensajes informativos con capacidad actual y espacios disponibles
   - Integrado en la sección de asignación de cajas a lotes de prendas
+- **Escáner NFC de cajas en botón "Ingresar"**: Nueva funcionalidad para escanear tags NFC de cajas al ingresar prendas individuales
+  - Botón "Escanear NFC" junto al selector de cajas en el modal de "Ingresar Prenda"
+  - Escaneo automático de tags NFC asociados a cajas
+  - Validación de capacidad máxima: si la caja está llena, muestra error y sugiere otra caja disponible
+  - Selección automática de la caja al escanear exitosamente
+  - Mensajes informativos con capacidad actual y espacios disponibles
+  - Integrado en el flujo de ingreso de prendas individuales desde el dashboard del usuario
 
 ### Fixed
 - **Corregida liberación de recursos de cámara en escáner de códigos de barras (Solución Definitiva v2)**: Solucionado completamente el problema donde la cámara no se liberaba correctamente y el campo de texto no era editable

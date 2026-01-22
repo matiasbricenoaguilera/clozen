@@ -23,6 +23,10 @@ const GarmentLocationModal = dynamic(() => import('@/components/garments/garment
   ssr: false
 })
 
+const PinterestOutfitAnalyzer = dynamic(() => import('@/components/pinterest/pinterest-outfit-analyzer').then(mod => ({ default: mod.PinterestOutfitAnalyzer })), {
+  ssr: false
+})
+
 export default function RecommendationsPage() {
   const { userProfile, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -213,6 +217,14 @@ export default function RecommendationsPage() {
           Sugerencias personalizadas basadas en el clima y tus prendas disponibles
         </p>
       </div>
+
+      {/* Analizador de Pinterest */}
+      {userProfile && (
+        <PinterestOutfitAnalyzer
+          userId={userProfile.id}
+          onOutfitSelect={handleUseOutfitClick}
+        />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Clima */}

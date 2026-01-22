@@ -154,6 +154,15 @@ export async function recommendOutfits(
     return []
   }
 
+  // ✅ Filtrar "ropa de trabajo" - no debe incluirse en recomendaciones
+  const garmentsForRecommendations = availableGarments.filter(
+    g => g.type.toLowerCase() !== 'ropa de trabajo'
+  )
+
+  if (garmentsForRecommendations.length === 0) {
+    return []
+  }
+
   // ✅ CONSULTAR USAGE_HISTORY para análisis detallado
   let usageHistory: UsageHistoryItem[] = []
   if (userId) {
@@ -181,7 +190,7 @@ export async function recommendOutfits(
 
   // Clasificar prendas por tipo
   const garmentsByType = new Map<string, Garment[]>()
-  availableGarments.forEach(garment => {
+  garmentsForRecommendations.forEach(garment => {
     const type = garment.type.toLowerCase()
     if (!garmentsByType.has(type)) {
       garmentsByType.set(type, [])

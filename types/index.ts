@@ -42,6 +42,24 @@ export interface VisionAnalysis {
   text: string[]
 }
 
+// Pinterest Outfit Matcher types
+export interface PinterestOutfitAnalysis {
+  detectedGarments: {
+    type: string
+    color: string
+    confidence: number
+  }[]
+  dominantColors: string[]
+  style: string[]
+  labels: string[]
+}
+
+export interface SimilarOutfit {
+  garments: Garment[]
+  similarityScore: number
+  reasoning: string
+}
+
 // API Response types
 export interface ApiResponse<T = any> {
   success: boolean
