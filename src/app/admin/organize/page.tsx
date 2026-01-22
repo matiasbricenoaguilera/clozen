@@ -55,6 +55,7 @@ export default function AdminOrganizePage() {
   const batchCodesRef = useRef<string>('')
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false)
   const [barcodeScannerKey, setBarcodeScannerKey] = useState(0) // ✅ Key para forzar recreación del escáner
+  const [scanningBoxNFC, setScanningBoxNFC] = useState(false) // Estado para escáner NFC de cajas
 
   useEffect(() => {
     loadData()
@@ -553,6 +554,78 @@ export default function AdminOrganizePage() {
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
     
     return availableBoxes.length > 0 ? availableBoxes[0] : null
+  }
+
+  // Función para manejar el escaneo NFC de cajas
+  const handleBoxNFCScan = async (tagId: string) => {
+    try {
+      const { findEntityByNFCTag } = await import('@/utils/nfc')
+      const entity = await findEntityByNFCTag(tagId)
+      
+      if (!entity) {
+        setBatchError('Tag NFC no encontrado. Asegúrate de que el tag esté asociado a una caja.')
+        return
+      }
+      
+      if (entity.entityType !== 'box') {
+        setBatchError(`Este tag NFC está asociado a una ${entity.entityType === 'garment' ? 'prenda' : 'entidad desconocida'}, no a una caja.`)
+        return
+      }
+      
+      // Obtener la caja completa desde el estado
+      const box = boxes.find(b => b.id === entity.entityId)
+      if (!box) {
+        setBatchError('Caja no encontrada en la lista actual.')
+        return
+      }
+      
+      // ✅ VALIDACIÓN DE CAPACIDAD MÁXIMA
+      const maxCapacity = getBoxMaxCapacity(box)
+      const currentCount = box.garment_count || 0
+      const isFull = currentCount >= maxCapacity
+      
+      if (isFull) {
+        // Buscar una caja alternativa disponible
+        const mostEmptyBox = findMostEmptyBox()
+        if (mostEmptyBox) {
+          setBatchError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+        } else {
+          setBatchError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas) y no hay otras cajas disponibles.`)
+        }
+        setScanningBoxNFC(false)
+        return
+      }
+      
+      // ✅ VALIDACIÓN DE ESPACIO SUFICIENTE PARA EL LOTE
+      const availableSpace = maxCapacity - currentCount
+      const willFit = foundGarmentsBatch.length <= availableSpace
+      
+      if (!willFit) {
+        setBatchError(`❌ No hay suficiente espacio en "${box.name}". Disponible: ${availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas.`)
+        setScanningBoxNFC(false)
+        return
+      }
+      
+      // ✅ Si pasa todas las validaciones, seleccionar la caja
+      const boxId = entity.entityId
+      setSelectedBoxForBatch(boxId)
+      
+      // Actualizar la información de la caja
+      setSelectedBoxInfo({
+        name: box.name,
+        location: box.location || undefined,
+        currentCount: currentCount,
+        availableSpace: availableSpace
+      })
+      setHasEnoughSpace(willFit)
+      setSuccess(`✅ Caja "${box.name}" seleccionada automáticamente (${currentCount}/${maxCapacity} prendas, ${availableSpace} espacios disponibles)`)
+      
+      // Cerrar el escáner
+      setScanningBoxNFC(false)
+    } catch (error: any) {
+      setBatchError(`Error al escanear caja: ${error.message || 'Error desconocido'}`)
+      setScanningBoxNFC(false)
+    }
   }
 
   // Función para mover prenda entre cajas
@@ -1103,9 +1176,43 @@ export default function AdminOrganizePage() {
               {/* Selector de caja para asignar al lote */}
               <div className="space-y-3 border-t pt-4">
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Asignar caja a todo el lote
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">
+                      Asignar caja a todo el lote
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setScanningBoxNFC(!scanningBoxNFC)
+                        if (scanningBoxNFC) {
+                          setBatchError('')
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Smartphone className="h-4 w-4" />
+                      {scanningBoxNFC ? 'Cancelar Escaneo' : 'Escanear NFC'}
+                    </Button>
+                  </div>
+                  
+                  {scanningBoxNFC && (
+                    <div className="mb-3 p-3 border rounded-lg bg-muted/50">
+                      <NFCScanner
+                        mode="read"
+                        onSuccess={handleBoxNFCScan}
+                        onError={(error) => {
+                          setBatchError(`Error NFC: ${error}`)
+                        }}
+                        title="Escanear Tag NFC de Caja"
+                        description="Acerca el tag NFC de la caja para seleccionarla automáticamente"
+                        continuous={false}
+                        skipExistenceCheck={true}
+                      />
+                    </div>
+                  )}
+                  
                   {foundGarmentsBatch.filter(g => g.status === 'in_use').length > 0 && (
                     <p className="text-xs text-yellow-600 dark:text-yellow-400 mb-2">
                       ⚠️ {foundGarmentsBatch.filter(g => g.status === 'in_use').length} prenda(s) se restaurarán

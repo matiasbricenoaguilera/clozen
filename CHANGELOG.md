@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Escáner NFC para seleccionar cajas automáticamente**: Nueva funcionalidad para escanear tags NFC de cajas al asignar prendas lavadas
+  - Botón "Escanear NFC" junto al selector de cajas en "Organizar Ropa Lavada"
+  - Escaneo automático de tags NFC asociados a cajas
+  - Validación de capacidad máxima: si la caja está llena, muestra error y sugiere otra caja disponible
+  - Validación de espacio suficiente: verifica que haya espacio para todo el lote de prendas
+  - Selección automática de la caja al escanear exitosamente
+  - Mensajes informativos con capacidad actual y espacios disponibles
+  - Integrado en la sección de asignación de cajas a lotes de prendas
+
 ### Fixed
 - **Corregida liberación de recursos de cámara en escáner de códigos de barras (Solución Definitiva v2)**: Solucionado completamente el problema donde la cámara no se liberaba correctamente y el campo de texto no era editable
   - **Componente BarcodeScanner** (`components/barcode/barcode-scanner.tsx`):
