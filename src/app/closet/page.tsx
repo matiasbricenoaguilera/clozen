@@ -78,6 +78,7 @@ export default function ClosetPage() {
   const [scannedGarmentForIngress, setScannedGarmentForIngress] = useState<Garment | null>(null)
   const [selectedBoxForIngress, setSelectedBoxForIngress] = useState<string>('')
   const [ingressingGarment, setIngressingGarment] = useState(false)
+  const [scanningBoxNFCForIngress, setScanningBoxNFCForIngress] = useState(false) // Estado para escáner NFC de cajas
 
   // Refs para optimizar escritura rápida de Scanner Keyboard
   const batchCodesRef = useRef<string>('')
@@ -619,6 +620,70 @@ export default function ClosetPage() {
       console.error('Error al escanear prenda:', error)
       const errorMessage = error instanceof Error ? error.message : 'Error al escanear la prenda. Inténtalo de nuevo.'
       setNfcError(errorMessage)
+    }
+  }
+
+  // Función para manejar el escaneo NFC de cajas al ingresar prenda
+  const handleBoxNFCScanForIngress = async (tagId: string) => {
+    try {
+      const { findEntityByNFCTag } = await import('@/utils/nfc')
+      const entity = await findEntityByNFCTag(tagId)
+      
+      if (!entity) {
+        setNfcError('Tag NFC no encontrado. Asegúrate de que el tag esté asociado a una caja.')
+        return
+      }
+      
+      if (entity.entityType !== 'box') {
+        setNfcError(`Este tag NFC está asociado a una ${entity.entityType === 'garment' ? 'prenda' : 'entidad desconocida'}, no a una caja.`)
+        return
+      }
+      
+      // Obtener la caja completa desde el estado
+      const box = boxes.find(b => b.id === entity.entityId)
+      if (!box) {
+        setNfcError('Caja no encontrada en la lista actual.')
+        return
+      }
+      
+      // ✅ VALIDACIÓN DE CAPACIDAD MÁXIMA
+      const maxCapacity = box.max_capacity || 15
+      const currentCount = box.garment_count || 0
+      const isFull = currentCount >= maxCapacity
+      
+      if (isFull) {
+        // Buscar una caja alternativa disponible
+        const availableBoxes = boxes
+          .filter(b => {
+            const maxCap = b.max_capacity || 15
+            return (b.garment_count || 0) < maxCap
+          })
+          .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
+        
+        if (availableBoxes.length > 0) {
+          const mostEmptyBox = availableBoxes[0]
+          setNfcError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+        } else {
+          setNfcError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas) y no hay otras cajas disponibles.`)
+        }
+        setScanningBoxNFCForIngress(false)
+        return
+      }
+      
+      // ✅ Si pasa la validación, seleccionar la caja automáticamente
+      setSelectedBoxForIngress(entity.entityId)
+      setScanningBoxNFCForIngress(false)
+      
+      // Mostrar mensaje de éxito temporal
+      const successMessage = `✅ Caja "${box.name}" seleccionada automáticamente (${currentCount}/${maxCapacity} prendas, ${maxCapacity - currentCount} espacios disponibles)`
+      setNfcError(successMessage)
+      // Limpiar el mensaje después de 3 segundos
+      setTimeout(() => {
+        setNfcError('')
+      }, 3000)
+    } catch (error: any) {
+      setNfcError(`Error al escanear caja: ${error.message || 'Error desconocido'}`)
+      setScanningBoxNFCForIngress(false)
     }
   }
 
@@ -1200,18 +1265,18 @@ export default function ClosetPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
           <Button
             onClick={() => setShowWithdrawScanner(true)}
-            className="w-full h-12 sm:h-14 text-base sm:text-lg"
+            className="w-full h-14 sm:h-16 text-base sm:text-lg font-semibold border-2 border-red-500 dark:border-red-400 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 hover:border-red-600 dark:hover:border-red-300 shadow-md hover:shadow-lg transition-all duration-200"
             variant="outline"
           >
-            <LogOut className="h-5 w-5 mr-2" />
+            <LogOut className="h-6 w-6 mr-2" />
             Retirar
           </Button>
           <Button
             onClick={() => setShowIngressScanner(true)}
-            className="w-full h-12 sm:h-14 text-base sm:text-lg"
-            variant="default"
+            className="w-full h-14 sm:h-16 text-base sm:text-lg font-semibold border-2 border-green-500 dark:border-green-400 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-950/50 hover:border-green-600 dark:hover:border-green-300 shadow-md hover:shadow-lg transition-all duration-200"
+            variant="outline"
           >
-            <LogIn className="h-5 w-5 mr-2" />
+            <LogIn className="h-6 w-6 mr-2" />
             Ingresar
           </Button>
         </div>
@@ -2065,9 +2130,43 @@ export default function ClosetPage() {
               </div>
 
               <div>
-                <label htmlFor="box-select" className="block text-sm font-medium mb-1">
-                  Cajón
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="box-select" className="block text-sm font-medium">
+                    Cajón
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setScanningBoxNFCForIngress(!scanningBoxNFCForIngress)
+                      if (scanningBoxNFCForIngress) {
+                        setNfcError('')
+                      }
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Smartphone className="h-4 w-4" />
+                    {scanningBoxNFCForIngress ? 'Cancelar Escaneo' : 'Escanear NFC'}
+                  </Button>
+                </div>
+                
+                {scanningBoxNFCForIngress && (
+                  <div className="mb-3 p-3 border rounded-lg bg-muted/50">
+                    <NFCScanner
+                      mode="read"
+                      onSuccess={handleBoxNFCScanForIngress}
+                      onError={(error) => {
+                        setNfcError(`Error NFC: ${error}`)
+                      }}
+                      title="Escanear Tag NFC de Caja"
+                      description="Acerca el tag NFC de la caja para seleccionarla automáticamente"
+                      continuous={false}
+                      skipExistenceCheck={true}
+                    />
+                  </div>
+                )}
+                
                 <Select
                   value={selectedBoxForIngress}
                   onValueChange={setSelectedBoxForIngress}
