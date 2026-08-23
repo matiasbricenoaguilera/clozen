@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Corregida escalada de privilegios en la tabla `users` (CRÍTICO)**: cualquier usuario autenticado podía convertirse en administrador
+  - La política RLS "Users can update their own data" permitía `UPDATE` sobre la fila propia sin restringir columnas, dejando `role` libre
+  - Bastaba con `supabase.from('users').update({ role: 'admin' })` desde la consola del navegador para acceder a los datos de todos los usuarios
+  - Nuevo `FIX_ROLE_PRIVILEGE_ESCALATION.sql` con tres capas: trigger `prevent_role_escalation`, `REVOKE UPDATE` de tabla + `GRANT` por columnas, y `WITH CHECK` explícito
+  - Corregida además la política recursiva "Admins can view all users" (causaba error 500 en el login) para que use `is_admin()`
+- **Autenticada la API route `/api/analyze-pinterest-outfit`**: era pública y aceptaba el `userId` desde el formData
+  - Nuevo helper `lib/supabase-server.ts` que valida el token `Authorization: Bearer` y devuelve un cliente que respeta RLS
+  - El usuario se deriva del token, nunca del cuerpo de la petición
+  - Añadidos límite de 10MB, validación de MIME (JPEG/PNG/WebP), filtrado de URLs no públicas y rate limit de 10 req/min por usuario
+  - **Efecto colateral**: la búsqueda de outfits de Pinterest ahora funciona de verdad. Antes el servidor usaba el cliente anónimo sin sesión, `auth.uid()` era NULL y la consulta de prendas devolvía siempre 0 filas
+- **Políticas de Supabase Storage para el bucket `garments`**: la ruta de subida la decidía el cliente, permitiendo escribir en la carpeta de otro usuario
+  - Nuevo `STORAGE_POLICIES_GARMENTS.sql`: INSERT/UPDATE/DELETE atados al prefijo `garments/{auth.uid()}/`, con excepción para administradores
+  - Límites aplicados en el bucket: 10MB y solo image/jpeg, image/png, image/webp
+  - Eliminada la política permisiva "Users can upload garment images"
+- **Nuevo `VERIFICAR_SEGURIDAD.sql`**: 10 comprobaciones con veredicto ✅/❌ para validar que los parches están aplicados
+- **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
+
+### Changed
+- **Actualizado Next.js de 16.1.1 a 16.3.2** y `eslint-config-next` a juego
+  - Resueltas 16 vulnerabilidades de dependencias (1 crítica, 11 altas) hasta dejar `npm audit` en 0
+  - Crítica: `protobufjs` (ejecución arbitraria de código) vía `@google-cloud/vision`
+  - Altas: `next` (DoS en Image Optimizer), `sharp` (CVEs de libvips), `ws` (divulgación de memoria)
+- **Añadido `CLAUDE.md`**: guía de arquitectura y convenciones del proyecto para Claude Code
+
 ### Added
 - **Búsqueda de outfits similares de Pinterest**: Nueva funcionalidad para encontrar outfits similares a imágenes de Pinterest usando Google Vision
   - **MEJORADO**: Sistema de búsqueda más flexible y preciso
