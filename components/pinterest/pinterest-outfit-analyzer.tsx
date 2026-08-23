@@ -7,15 +7,15 @@ import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Upload, Image as ImageIcon, Loader2, X, CheckCircle, AlertCircle, Shirt } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import type { SimilarOutfit, PinterestOutfitAnalysis, Garment } from '@/types'
 import Image from 'next/image'
 
 interface PinterestOutfitAnalyzerProps {
-  userId: string
   onOutfitSelect?: (outfit: Garment[]) => void
 }
 
-export function PinterestOutfitAnalyzer({ userId, onOutfitSelect }: PinterestOutfitAnalyzerProps) {
+export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnalyzerProps) {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imageUrl, setImageUrl] = useState<string>('')
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -68,16 +68,25 @@ export function PinterestOutfitAnalyzer({ userId, onOutfitSelect }: PinterestOut
     setSimilarOutfits([])
 
     try {
+      // El endpoint deriva el usuario del token de sesión, no del formData
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        throw new Error('Tu sesión expiró. Vuelve a iniciar sesión para analizar imágenes.')
+      }
+
       const formData = new FormData()
       if (imageFile) {
         formData.append('image', imageFile)
       } else if (imageUrl) {
         formData.append('imageUrl', imageUrl)
       }
-      formData.append('userId', userId)
 
       const response = await fetch('/api/analyze-pinterest-outfit', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        },
         body: formData
       })
 

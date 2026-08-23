@@ -221,7 +221,6 @@ export default function RecommendationsPage() {
       {/* Analizador de Pinterest */}
       {userProfile && (
         <PinterestOutfitAnalyzer
-          userId={userProfile.id}
           onOutfitSelect={handleUseOutfitClick}
         />
       )}
