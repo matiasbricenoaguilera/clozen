@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# volcados de trazas de rendimiento (Chrome DevTools) - nunca versionar
+Trace-*.json
+*.cpuprofile
+*.heapsnapshot
