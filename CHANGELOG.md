@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Sugerencia automática de datos al añadir una prenda**: al subir la foto se rellenan nombre, tipo, temporada y estilo
+  - Nuevo endpoint `/api/analyze-garment` que analiza la imagen con Claude (visión) y devuelve la sugerencia
+  - La respuesta va forzada contra la taxonomía del proyecto: el modelo solo puede elegir tipos, temporadas y estilos que el formulario acepta
+  - Nueva `lib/garment-taxonomy.ts` como fuente única de tipos, temporadas y estilos, compartida entre el formulario y el analizador
+  - El análisis corre en paralelo a la selección de la foto y nunca sobrescribe lo que el usuario ya haya escrito
+  - Los campos rellenados automáticamente se marcan con un distintivo "sugerido"
+  - Botón **"Guardar y añadir otra"**: conserva usuario y caja entre prendas para catalogar en serie
+  - Si no hay `ANTHROPIC_API_KEY` configurada, el formulario funciona en manual exactamente como antes
+
+### Changed
+- **Sistema de notificaciones (toasts)** basado en `@radix-ui/react-toast`, que ya estaba instalado sin usar
+  - Sustituidos los 4 `alert()` nativos que bloqueaban el navegador, incluido el de la asignación por lote
+  - En móvil aparecen abajo, al alcance del pulgar; en escritorio arriba a la derecha
+- **Accesibilidad**: añadidos `aria-label` a los botones de solo icono (antes no había ninguno en toda la app), `aria-expanded` en el menú móvil y objetivos táctiles de 44px (WCAG 2.5.5) en los botones
+- **Los `console.log` ya no llegan a producción**: `compiler.removeConsole` en `next.config.ts` (se conservan `error` y `warn`). Eliminados además los volcados de datos personales del navbar y del formulario de alta
+- **Dependencias**: eliminadas `@supabase/auth-ui-react`, `@supabase/auth-ui-shared`, `@radix-ui/react-alert-dialog` y `@types/bcryptjs`, que no se usaban
+- El navbar ya no ofrece "Iniciar sesión" estando en la pantalla de login (ni "Registrarse" en la de registro)
+
 ### Security
 - **Corregida escalada de privilegios en la tabla `users` (CRÍTICO)**: cualquier usuario autenticado podía convertirse en administrador
   - La política RLS "Users can update their own data" permitía `UPDATE` sobre la fila propia sin restringir columnas, dejando `role` libre

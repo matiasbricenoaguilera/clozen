@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
@@ -19,62 +19,21 @@ const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanne
   loading: () => <div className="p-4 text-center text-muted-foreground">Cargando escáner de códigos de barras...</div>
 })
 import { DemoBanner } from '@/components/ui/demo-banner'
-import { ArrowLeft, Save, AlertCircle, Camera } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle, Camera, Sparkles, Loader2 } from 'lucide-react'
 import type { Box, GarmentForm } from '@/types'
-
-const GARMENT_TYPES = [
-  'abrigo',
-  'accesorios',
-  'bata',
-  'bermuda',
-  'bikini',
-  'blusa',
-  'bolso',
-  'botas',
-  'camisa',
-  'camiseta',
-  'chaleco',
-  'chaqueta',
-  'cinturón',
-  'deportiva',
-  'falda',
-  'jersey',
-  'pantalon',
-  'pantalón corto',
-  'pijama',
-  'polera',
-  'polerón',
-  'ropa de casa',
-  'ropa de trabajo',
-  'ropa deportiva',
-  'ropa interior',
-  'sandalias',
-  'suéter',
-  'sweater',
-  'traje de baño',
-  'vestido',
-  'zapatillas',
-  'zapatos'
-] // Ordenados alfabéticamente para fácil búsqueda
-
-const SEASONS = [
-  { value: 'verano', label: 'Verano' },
-  { value: 'invierno', label: 'Invierno' },
-  { value: 'otoño', label: 'Otoño' },
-  { value: 'primavera', label: 'Primavera' },
-  { value: 'all', label: 'Todo el año' }
-]
-
-const STYLES = [
-  'casual', 'formal', 'deportivo', 'elegante', 'bohemio', 'clásico',
-  'moderno', 'vintage', 'minimalista', 'colorido'
-]
+import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/garment-taxonomy'
+import { toast } from '@/hooks/use-toast'
 
 export default function AddGarmentPage() {
   const { userProfile, loading: authLoading } = useAuth()
   const router = useRouter()
   const [boxes, setBoxes] = useState<Box[]>([])
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  // Al catalogar en serie no se vuelve al listado: se encadena la siguiente prenda
+  const encadenarOtraRef = useRef(false)
+  // Campos que vienen de la sugerencia automática: se marcan en la UI para revisarlos de un vistazo
+  const [suggestedFields, setSuggestedFields] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [nfcMode, setNfcMode] = useState<'read' | 'write' | 'manual' | 'barcode' | null>(null)
@@ -175,9 +134,7 @@ export default function AddGarmentPage() {
     }
 
     try {
-      console.log('🔍 [fetchUsers] Iniciando búsqueda de usuarios...')
-      console.log('🔍 [fetchUsers] Usuario actual:', userProfile?.id, userProfile?.email, userProfile?.role)
-      
+
       const { data, error } = await supabase
         .from('users')
         .select('id, email, full_name')
@@ -189,9 +146,7 @@ export default function AddGarmentPage() {
         throw error
       }
       
-      console.log('✅ [fetchUsers] Usuarios encontrados:', data?.length || 0)
-      console.log('📋 [fetchUsers] Lista de usuarios:', data)
-      
+
       setUsers(data || [])
     } catch (error) {
       console.error('❌ [fetchUsers] Error capturado:', error)
@@ -740,8 +695,31 @@ export default function AddGarmentPage() {
 
       console.log('🔄 Redirigiendo al closet...')
       console.timeEnd('🕐 Total Submit Time')
-      console.log('🔄 Redirigiendo al closet...')
       console.timeEnd('🕐 Total Submit Time')
+
+      if (encadenarOtraRef.current) {
+        // Se conservan usuario y caja: catalogar un armario entero es repetir
+        // la misma combinación decenas de veces
+        encadenarOtraRef.current = false
+        setFormData(prev => ({
+          name: '',
+          type: '',
+          season: undefined,
+          style: [],
+          boxId: prev.boxId,
+          image: undefined
+        }))
+        setSelectedImage(null)
+        setSuggestedFields(new Set())
+        setSelectedNfcTag('')
+        setBarcodeCode('')
+        setNfcMode(null)
+        setError('')
+        toast.success('Puedes añadir la siguiente prenda', 'Prenda guardada')
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+
       router.push('/closet')
     } catch (error: any) {
       console.error('💥 Error en submit:', error)
@@ -782,12 +760,100 @@ export default function AddGarmentPage() {
     }
   }
 
+  /**
+   * Pide una sugerencia de nombre/tipo/temporada/estilo a partir de la foto.
+   * Se lanza en paralelo a la selección de imagen: el usuario puede seguir
+   * rellenando campos mientras llega, y nunca sobreescribe lo que ya haya escrito.
+   */
+  const analyzeImage = useCallback(async (file: File) => {
+    if (!isSupabaseConfigured) return
+
+    setAnalyzing(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+
+      // La versión comprimida basta para clasificar y es mucho más ligera de enviar
+      const compressed = await compressImage(file)
+
+      const body = new FormData()
+      body.append('image', compressed)
+
+      const response = await fetch('/api/analyze-garment', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        // Falta de configuración o error puntual: el formulario sigue siendo manual
+        if (response.status !== 503) {
+          toast.error(data.error || 'No se pudo analizar la imagen', 'Sugerencia no disponible')
+        }
+        return
+      }
+
+      const suggestion: GarmentSuggestion = data.suggestion
+      const rellenados = new Set<string>()
+
+      setFormData(prev => {
+        const siguiente = { ...prev }
+        // Solo se rellena lo que esté vacío: lo que el usuario ya escribió manda
+        if (!prev.name.trim() && suggestion.name) {
+          siguiente.name = suggestion.name
+          rellenados.add('name')
+        }
+        if (!prev.type && suggestion.type) {
+          siguiente.type = suggestion.type
+          rellenados.add('type')
+        }
+        if (!prev.season && suggestion.season) {
+          siguiente.season = suggestion.season as GarmentForm['season']
+          rellenados.add('season')
+        }
+        if (prev.style.length === 0 && suggestion.style?.length) {
+          siguiente.style = [...suggestion.style]
+          rellenados.add('style')
+        }
+        return siguiente
+      })
+
+      setSuggestedFields(rellenados)
+
+      if (rellenados.size > 0) {
+        toast.success(
+          `${suggestion.name}${suggestion.color ? ` · ${suggestion.color}` : ''}`,
+          'Datos sugeridos'
+        )
+      }
+    } catch (error) {
+      console.error('Error analizando la prenda:', error)
+    } finally {
+      setAnalyzing(false)
+    }
+  }, [])
+
+
+  /** Distintivo que marca un campo rellenado automáticamente desde la foto */
+  const SugeridoBadge = ({ field }: { field: string }) =>
+    suggestedFields.has(field) ? (
+      <span className="ml-2 inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary align-middle">
+        <Sparkles className="mr-1 h-3 w-3" aria-hidden="true" />
+        sugerido
+      </span>
+    ) : null
+
   const handleImageSelect = (file: File) => {
     setSelectedImage(file)
+    // No se espera al análisis: corre de fondo mientras se sigue rellenando
+    void analyzeImage(file)
   }
 
   const handleImageRemove = () => {
     setSelectedImage(null)
+    setSuggestedFields(new Set())
   }
 
   const handleNFCRead = async (tagId: string) => {
@@ -1076,7 +1142,7 @@ export default function AddGarmentPage() {
                 )}
 
                 <div>
-                  <Label htmlFor="name">Nombre *</Label>
+                  <Label htmlFor="name">Nombre *<SugeridoBadge field="name" /></Label>
                   <Input
                     id="name"
                     value={formData.name}
@@ -1087,7 +1153,7 @@ export default function AddGarmentPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="type">Tipo de prenda *</Label>
+                  <Label htmlFor="type">Tipo de prenda *<SugeridoBadge field="type" /></Label>
                   <Select
                     value={formData.type}
                     onValueChange={(value) => setFormData(prev => ({ ...prev, type: value }))}
@@ -1106,7 +1172,7 @@ export default function AddGarmentPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="season">Temporada</Label>
+                  <Label htmlFor="season">Temporada<SugeridoBadge field="season" /></Label>
                   <Select
                     value={formData.season || ''}
                     onValueChange={(value) => setFormData(prev => ({
@@ -1184,7 +1250,7 @@ export default function AddGarmentPage() {
             {/* Estilos */}
             <Card>
               <CardHeader>
-                <CardTitle>Estilos</CardTitle>
+                <CardTitle>Estilos<SugeridoBadge field="style" /></CardTitle>
                 <CardDescription>
                   Selecciona los estilos que mejor describan esta prenda
                 </CardDescription>
@@ -1223,6 +1289,16 @@ export default function AddGarmentPage() {
                   onFileSelect={handleImageSelect}
                   onFileRemove={handleImageRemove}
                 />
+                {analyzing && (
+                  <p
+                    className="mt-3 flex items-center text-sm text-muted-foreground"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    Identificando la prenda…
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -1465,6 +1541,25 @@ export default function AddGarmentPage() {
             className="w-full sm:flex-1"
           >
             Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={saving}
+            variant="outline"
+            className="w-full sm:flex-1"
+            onClick={() => { encadenarOtraRef.current = true }}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                Guardar y añadir otra
+              </>
+            )}
           </Button>
           <Button
             type="submit"
