@@ -24,6 +24,7 @@ import type { Box, GarmentForm } from '@/types'
 import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/garment-taxonomy'
 import { toast } from '@/hooks/use-toast'
 import { getFreshAccessToken } from '@/lib/session'
+import { isHeic, heicToJpeg } from '@/lib/image-format'
 
 export default function AddGarmentPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -31,6 +32,7 @@ export default function AddGarmentPage() {
   const [boxes, setBoxes] = useState<Box[]>([])
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [convirtiendo, setConvirtiendo] = useState(false)
   // Al catalogar en serie no se vuelve al listado: se encadena la siguiente prenda
   const encadenarOtraRef = useRef(false)
   // Campos que vienen de la sugerencia automática: se marcan en la UI para revisarlos de un vistazo
@@ -852,10 +854,30 @@ export default function AddGarmentPage() {
       </span>
     ) : null
 
-  const handleImageSelect = (file: File) => {
-    setSelectedImage(file)
+  const handleImageSelect = async (file: File) => {
+    let imagen = file
+
+    // Las fotos de iPhone vienen en HEIC y ni el navegador ni Storage ni el
+    // analizador las entienden: se convierten a JPEG antes de seguir.
+    if (isHeic(file)) {
+      setConvirtiendo(true)
+      try {
+        imagen = await heicToJpeg(file)
+      } catch (error) {
+        console.error('Error convirtiendo HEIC:', error)
+        toast.error(
+          'No se pudo convertir la foto. Prueba a exportarla como JPEG desde el móvil.',
+          'Formato no compatible'
+        )
+        return
+      } finally {
+        setConvirtiendo(false)
+      }
+    }
+
+    setSelectedImage(imagen)
     // No se espera al análisis: corre de fondo mientras se sigue rellenando
-    void analyzeImage(file)
+    void analyzeImage(imagen)
   }
 
   const handleImageRemove = () => {
@@ -1296,6 +1318,16 @@ export default function AddGarmentPage() {
                   onFileSelect={handleImageSelect}
                   onFileRemove={handleImageRemove}
                 />
+                {convirtiendo && (
+                  <p
+                    className="mt-3 flex items-center text-sm text-muted-foreground"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    Convirtiendo la foto del móvil…
+                  </p>
+                )}
                 {analyzing && (
                   <p
                     className="mt-3 flex items-center text-sm text-muted-foreground"

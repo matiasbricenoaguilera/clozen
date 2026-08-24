@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Upload, Image as ImageIcon, Loader2, X, CheckCircle, AlertCircle, Shirt } from 'lucide-react'
 import { getFreshAccessToken } from '@/lib/session'
+import { isHeic, heicToJpeg } from '@/lib/image-format'
 import type { SimilarOutfit, PinterestOutfitAnalysis, Garment } from '@/types'
 import Image from 'next/image'
 
@@ -24,10 +25,12 @@ export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnaly
   const [similarOutfits, setSimilarOutfits] = useState<SimilarOutfit[]>([])
   const [error, setError] = useState<string>('')
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    let file = e.target.files?.[0]
     if (file) {
-      if (!file.type.startsWith('image/')) {
+      const esImagen =
+        file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name)
+      if (!esImagen) {
         setError('Por favor selecciona un archivo de imagen')
         return
       }
@@ -35,6 +38,17 @@ export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnaly
         setError('La imagen debe ser menor a 10MB')
         return
       }
+
+      if (isHeic(file)) {
+        try {
+          file = await heicToJpeg(file)
+        } catch (err) {
+          console.error('Error convirtiendo HEIC:', err)
+          setError('No se pudo convertir la foto. Prueba a exportarla como JPEG.')
+          return
+        }
+      }
+
       setImageFile(file)
       setImageUrl('')
       setPreviewUrl(URL.createObjectURL(file))

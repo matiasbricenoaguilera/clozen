@@ -18,7 +18,7 @@ export function FileUpload({
   onFileSelect,
   onFileRemove,
   selectedFile,
-  accept = "image/*",
+  accept = "image/*,.heic,.heif",
   maxSize = 10,
   className
 }: FileUploadProps) {
@@ -29,8 +29,11 @@ export function FileUpload({
   const validateFile = (file: File) => {
     setError('')
 
-    // Validar tipo
-    if (!file.type.startsWith('image/')) {
+    // Validar tipo. Los HEIC de iPhone llegan a veces con `type` vacío,
+    // así que se acepta también por extensión.
+    const esImagen =
+      file.type.startsWith('image/') || /\.(heic|heif)$/i.test(file.name)
+    if (!esImagen) {
       setError('Solo se permiten archivos de imagen')
       return false
     }

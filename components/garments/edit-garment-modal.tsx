@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
+import { isHeic, heicToJpeg } from '@/lib/image-format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -253,7 +254,17 @@ export function EditGarmentModal({
     }))
   }
 
-  const handleImageSelect = (file: File | null) => {
+  const handleImageSelect = async (file: File | null) => {
+    // Las fotos de iPhone llegan en HEIC: ni el canvas ni Storage las aceptan
+    if (file && isHeic(file)) {
+      try {
+        file = await heicToJpeg(file)
+      } catch (error) {
+        console.error('Error convirtiendo HEIC:', error)
+        return
+      }
+    }
+
     setSelectedImage(file)
     if (file) {
       const reader = new FileReader()
