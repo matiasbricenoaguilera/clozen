@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
 import { DemoBanner } from '@/components/ui/demo-banner'
 import { Plus, Package, Edit, Trash2, Smartphone, AlertCircle } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
 import type { Box } from '@/types'
 
 export default function AdminBoxesPage() {
@@ -173,7 +174,10 @@ export default function AdminBoxesPage() {
 
     // En modo demo, mostrar mensaje
     if (!isSupabaseConfigured) {
-      alert('Modo demo: Las cajas no se eliminan realmente. Configura Supabase para funcionalidad completa.')
+      toast({
+        title: 'Modo demo',
+        description: 'Las cajas no se eliminan realmente. Configura Supabase para la funcionalidad completa.'
+      })
       return
     }
 
@@ -229,7 +233,7 @@ export default function AdminBoxesPage() {
         .single()
 
       if (existingBox) {
-        alert(`Este tag NFC ya está asignado a la caja "${existingBox.name}". Por favor usa un tag diferente.`)
+        toast.error(`Este tag NFC ya está asignado a la caja "${existingBox.name}". Usa un tag diferente.`, 'Tag ocupado')
         return
       }
 
@@ -241,7 +245,7 @@ export default function AdminBoxesPage() {
         .single()
 
       if (existingGarment) {
-        alert(`Este tag NFC ya está asignado a la prenda "${existingGarment.name}". Por favor usa un tag diferente.`)
+        toast.error(`Este tag NFC ya está asignado a la prenda "${existingGarment.name}". Usa un tag diferente.`, 'Tag ocupado')
         return
       }
 

@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle, LogOut, LogIn } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
+import { toast } from '@/hooks/use-toast'
 import type { Garment, Box, WeatherData } from '@/types'
 
 // Lazy load componentes pesados que no se usan en el render inicial
@@ -1081,17 +1082,17 @@ export default function ClosetPage() {
       setShowNFCScanner(false)
       setNfcError('')
       
-      // Mostrar mensaje de éxito mejorado y claro
-      const alertMessage = `✅ ASIGNACIÓN COMPLETADA\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `📦 CAJA: ${boxName}\n` +
-        (boxLocation ? `📍 UBICACIÓN: ${boxLocation}\n` : '') +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `✅ ${foundGarmentsBatch.length} prenda(s) asignada(s)\n` +
-        (inUseGarments.length > 0 ? `✅ ${inUseGarments.length} prenda(s) restaurada(s) del estado "en uso"\n` : '') +
-        (boxChanged ? `\n⚠️ Nota: Se asignó automáticamente a la caja más vacía disponible` : '')
-      
-      alert(alertMessage)
+      // Confirmación no bloqueante: el detalle completo queda además en la UI
+      const detalle = [
+        `${foundGarmentsBatch.length} prenda(s) en "${boxName}"`,
+        boxLocation ? `Ubicación: ${boxLocation}` : null,
+        inUseGarments.length > 0 ? `${inUseGarments.length} restaurada(s) de "en uso"` : null,
+        boxChanged ? 'Se eligió automáticamente la caja más vacía disponible' : null
+      ]
+        .filter(Boolean)
+        .join(' · ')
+
+      toast.success(detalle, 'Asignación completada')
       
       // También mostrar en la UI con un mensaje persistente y claro
       setNfcError(`✅ ${foundGarmentsBatch.length} prenda(s) asignada(s) a la caja "${boxName}"${boxLocation ? ` (📍 ${boxLocation})` : ''}${inUseGarments.length > 0 ? `. ${inUseGarments.length} restaurada(s).` : ''}`)

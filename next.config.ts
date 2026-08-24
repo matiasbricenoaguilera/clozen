@@ -24,6 +24,15 @@ const nextConfig: NextConfig = {
   
   // Compresión
   compress: true,
+
+  // Elimina los console.log del bundle de producción (se conservan error y warn).
+  // Evita filtrar datos personales por consola sin tener que tocar cada llamada.
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === 'production'
+        ? { exclude: ['error', 'warn'] }
+        : false,
+  },
   
   // Headers de caché
   async headers() {

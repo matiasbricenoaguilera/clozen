@@ -208,6 +208,7 @@ export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnaly
                 size="icon"
                 onClick={handleClear}
                 disabled={analyzing}
+                aria-label="Quitar la imagen seleccionada"
               >
                 <X className="h-4 w-4" />
               </Button>

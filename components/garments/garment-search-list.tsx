@@ -117,6 +117,7 @@ export function GarmentSearchList({
               variant="ghost"
               size="icon"
               onClick={handleClose}
+              aria-label="Cerrar búsqueda de prendas"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -194,8 +195,9 @@ export function GarmentSearchList({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-8 w-8"
                             onClick={() => onRemoveGarment(garment.id)}
+                            aria-label={`Quitar ${garment.name} de la selección`}
                           >
                             <X className="h-3 w-3" />
                           </Button>

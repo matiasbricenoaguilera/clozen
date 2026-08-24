@@ -294,7 +294,12 @@ export function BarcodeScanner({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         {onClose && (
-          <Button variant="ghost" size="icon" onClick={handleStop}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleStop}
+            aria-label="Cerrar escáner de códigos de barras"
+          >
             <X className="h-4 w-4" />
           </Button>
         )}

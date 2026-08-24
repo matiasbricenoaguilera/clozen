@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
@@ -12,21 +13,11 @@ export function Navbar() {
   const { theme, setTheme } = useTheme()
   const { userProfile, signOut, loading: authLoading } = useAuth()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pathname = usePathname()
 
-  // Log de diagnóstico
-  useEffect(() => {
-    if (userProfile) {
-      console.log('🔍 [Navbar] userProfile:', {
-        id: userProfile.id,
-        email: userProfile.email,
-        role: userProfile.role,
-        full_name: userProfile.full_name
-      })
-      console.log('🔍 [Navbar] ¿Es admin?', userProfile.role === 'admin')
-    } else {
-      console.log('🔍 [Navbar] No hay userProfile')
-    }
-  }, [userProfile])
+  // En las propias pantallas de login/registro sobra ofrecer lo mismo en la barra
+  const enLogin = pathname === '/auth/login'
+  const enRegistro = pathname === '/auth/register'
 
   const handleLogout = async () => {
     await signOut()
@@ -129,16 +120,20 @@ export function Navbar() {
               </Button>
             ) : (
               <>
-                <Link href="/auth/login">
-                  <Button variant="ghost" size="sm" className="hidden lg:flex">
-                    Iniciar sesión
-                  </Button>
-                </Link>
-                <Link href="/auth/register">
-                  <Button size="sm" className="hidden lg:flex">
-                    Registrarse
-                  </Button>
-                </Link>
+                {!enLogin && (
+                  <Link href="/auth/login">
+                    <Button variant="ghost" size="sm" className="hidden lg:flex">
+                      Iniciar sesión
+                    </Button>
+                  </Link>
+                )}
+                {!enRegistro && (
+                  <Link href="/auth/register">
+                    <Button size="sm" className="hidden lg:flex">
+                      Registrarse
+                    </Button>
+                  </Link>
+                )}
               </>
             )}
           </div>
@@ -151,6 +146,7 @@ export function Navbar() {
             size="sm"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="mr-2"
+            aria-label="Cambiar entre tema claro y oscuro"
           >
             <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
             <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
@@ -160,6 +156,8 @@ export function Navbar() {
             variant="ghost"
             size="icon"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? (
               <X className="h-5 w-5" />
@@ -240,16 +238,20 @@ export function Navbar() {
 
             {!userProfile && (
               <>
-                <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start">
-                    Iniciar sesión
-                  </Button>
-                </Link>
-                <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)}>
-                  <Button className="w-full justify-start">
-                    Registrarse
-                  </Button>
-                </Link>
+                {!enLogin && (
+                  <Link href="/auth/login" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="ghost" className="w-full justify-start">
+                      Iniciar sesión
+                    </Button>
+                  </Link>
+                )}
+                {!enRegistro && (
+                  <Link href="/auth/register" onClick={() => setMobileMenuOpen(false)}>
+                    <Button className="w-full justify-start">
+                      Registrarse
+                    </Button>
+                  </Link>
+                )}
               </>
             )}
           </div>

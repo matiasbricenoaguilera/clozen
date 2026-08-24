@@ -50,6 +50,21 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        // Entrada/salida de los toasts: desde abajo en móvil, se desvanecen al salir
+        "toast-in": {
+          from: { transform: "translateY(0.75rem)", opacity: "0" },
+          to: { transform: "translateY(0)", opacity: "1" },
+        },
+        "toast-out": {
+          from: { opacity: "1" },
+          to: { transform: "translateY(0.5rem)", opacity: "0" },
+        },
+      },
+      animation: {
+        "toast-in": "toast-in 150ms ease-out",
+        "toast-out": "toast-out 120ms ease-in forwards",
+      },
     },
   },
   plugins: [],
