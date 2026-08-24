@@ -58,7 +58,16 @@ export async function authenticateRequest(
   const { data, error } = await supabase.auth.getUser(token)
 
   if (error || !data?.user) {
-    return { error: 'Sesión inválida o expirada', status: 401 }
+    // Sin este log, un 401 en producción no dice nada sobre su causa
+    console.error('[auth] Token rechazado:', error?.message ?? 'respuesta sin usuario')
+
+    const expirado = error?.message?.toLowerCase().includes('expired')
+    return {
+      error: expirado
+        ? 'Tu sesión expiró. Vuelve a iniciar sesión.'
+        : 'Sesión no válida. Vuelve a iniciar sesión.',
+      status: 401
+    }
   }
 
   return { supabase, user: data.user }

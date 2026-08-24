@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Upload, Image as ImageIcon, Loader2, X, CheckCircle, AlertCircle, Shirt } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { getFreshAccessToken } from '@/lib/session'
 import type { SimilarOutfit, PinterestOutfitAnalysis, Garment } from '@/types'
 import Image from 'next/image'
 
@@ -69,9 +69,9 @@ export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnaly
 
     try {
       // El endpoint deriva el usuario del token de sesión, no del formData
-      const { data: { session } } = await supabase.auth.getSession()
+      const token = await getFreshAccessToken()
 
-      if (!session?.access_token) {
+      if (!token) {
         throw new Error('Tu sesión expiró. Vuelve a iniciar sesión para analizar imágenes.')
       }
 
@@ -85,7 +85,7 @@ export function PinterestOutfitAnalyzer({ onOutfitSelect }: PinterestOutfitAnaly
       const response = await fetch('/api/analyze-pinterest-outfit', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.access_token}`
+          Authorization: `Bearer ${token}`
         },
         body: formData
       })

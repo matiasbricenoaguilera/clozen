@@ -23,6 +23,7 @@ import { ArrowLeft, Save, AlertCircle, Camera, Sparkles, Loader2 } from 'lucide-
 import type { Box, GarmentForm } from '@/types'
 import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/garment-taxonomy'
 import { toast } from '@/hooks/use-toast'
+import { getFreshAccessToken } from '@/lib/session'
 
 export default function AddGarmentPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -770,8 +771,14 @@ export default function AddGarmentPage() {
 
     setAnalyzing(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      const token = await getFreshAccessToken()
+      if (!token) {
+        toast.error(
+          'Vuelve a iniciar sesión para que se rellenen los datos automáticamente.',
+          'Sesión caducada'
+        )
+        return
+      }
 
       // La versión comprimida basta para clasificar y es mucho más ligera de enviar
       const compressed = await compressImage(file)
@@ -781,7 +788,7 @@ export default function AddGarmentPage() {
 
       const response = await fetch('/api/analyze-garment', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
         body
       })
 
