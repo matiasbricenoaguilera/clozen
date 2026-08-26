@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
 import type { Garment, Box } from '@/types'
+import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
 
 const GARMENT_TYPES = [
   'camisa', 'pantalon', 'vestido', 'falda', 'chaqueta', 'abrigo',
@@ -214,7 +215,7 @@ export function EditGarmentModal({
     
     // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
     const availableBoxes = boxesWithCount
-      .filter(box => (box.garment_count || 0) < 15)
+      .filter(box => !isBoxFull(box))
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
     
     return availableBoxes.length > 0 ? availableBoxes[0] : null
@@ -224,12 +225,13 @@ export function EditGarmentModal({
     // Si se está cambiando la caja, validar capacidad
     if (field === 'box_id' && value && value !== 'none') {
       const selectedBox = boxesWithCount.find(b => b.id === value)
-      if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+      if (selectedBox && isBoxFull(selectedBox)) {
+        const maxCapacity = getBoxMaxCapacity(selectedBox)
         const mostEmptyBox = findMostEmptyBox()
         if (mostEmptyBox) {
-          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
         } else {
-          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
         }
         // No cambiar el valor si la caja está llena
         return
@@ -391,12 +393,13 @@ export function EditGarmentModal({
         if (selectedBox) {
           // Si se está moviendo a la misma caja, no hay problema
           // Si se está moviendo a otra caja, verificar capacidad
-          if (!isMovingToSameBox && (selectedBox.garment_count || 0) >= 15) {
+          if (!isMovingToSameBox && isBoxFull(selectedBox)) {
+            const maxCapacity = getBoxMaxCapacity(selectedBox)
             const mostEmptyBox = findMostEmptyBox()
             if (mostEmptyBox) {
-              setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
             } else {
-              setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
             }
             setSaving(false)
             return
@@ -626,7 +629,8 @@ export function EditGarmentModal({
                   <SelectItem value="none">Sin caja</SelectItem>
                   {(boxesWithCount.length > 0 ? boxesWithCount : boxes).map(box => {
                     const count = box.garment_count ?? 0
-                    const isFull = count >= 15
+                    const maxCapacity = getBoxMaxCapacity(box)
+                    const isFull = count >= maxCapacity
                     return (
                       <SelectItem 
                         key={box.id} 
@@ -634,7 +638,7 @@ export function EditGarmentModal({
                         disabled={isFull}
                         className={isFull ? 'opacity-50' : ''}
                       >
-                        {box.name} {count > 0 && `(${count}/15)`} {isFull && ' - LLENA'}
+                        {box.name} {count > 0 && `(${count}/${maxCapacity})`} {isFull && ' - LLENA'}
                     </SelectItem>
                     )
                   })}

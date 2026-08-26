@@ -14,6 +14,7 @@ import { DemoBanner } from '@/components/ui/demo-banner'
 import { Plus, Package, Edit, Trash2, Smartphone, AlertCircle } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import type { Box } from '@/types'
+import { DEFAULT_BOX_CAPACITY, getBoxMaxCapacity } from '@/utils/box-capacity'
 
 export default function AdminBoxesPage() {
   const { userProfile } = useAuth()
@@ -26,9 +27,9 @@ export default function AdminBoxesPage() {
     description: '',
     location: '',
     nfcTagId: '',
-    maxCapacity: 15 // Valor por defecto
+    maxCapacity: DEFAULT_BOX_CAPACITY // Valor por defecto
   })
-  const [maxCapacityInput, setMaxCapacityInput] = useState('15') // Input como string para permitir edición
+  const [maxCapacityInput, setMaxCapacityInput] = useState(String(DEFAULT_BOX_CAPACITY)) // Input como string para permitir edición
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -94,7 +95,7 @@ export default function AdminBoxesPage() {
             description: formData.description,
             location: formData.location,
             nfc_tag_id: formData.nfcTagId || null,
-            max_capacity: formData.maxCapacity || 15
+            max_capacity: formData.maxCapacity || DEFAULT_BOX_CAPACITY
           })
           .eq('id', editingBox.id)
 
@@ -136,7 +137,7 @@ export default function AdminBoxesPage() {
             description: formData.description,
             location: formData.location,
             nfc_tag_id: formData.nfcTagId || null,
-            max_capacity: formData.maxCapacity || 15,
+            max_capacity: formData.maxCapacity || DEFAULT_BOX_CAPACITY,
             created_by: userProfile?.id
           })
           .select()
@@ -204,7 +205,7 @@ export default function AdminBoxesPage() {
 
   const handleEdit = (box: Box) => {
     setEditingBox(box)
-    const maxCapacity = box.max_capacity || 15
+    const maxCapacity = getBoxMaxCapacity(box)
     setFormData({
       name: box.name,
       description: box.description || '',
@@ -264,9 +265,9 @@ export default function AdminBoxesPage() {
       description: '',
       location: '',
       nfcTagId: '',
-      maxCapacity: 15
+      maxCapacity: DEFAULT_BOX_CAPACITY
     })
-    setMaxCapacityInput('15') // Resetear input string
+    setMaxCapacityInput(String(DEFAULT_BOX_CAPACITY)) // Resetear input string
     setError('')
   }
 
@@ -372,8 +373,8 @@ export default function AdminBoxesPage() {
                     // Al perder el foco, asegurar valor válido
                     const numValue = parseInt(e.target.value)
                     if (isNaN(numValue) || numValue < 1) {
-                      setMaxCapacityInput('15')
-                      setFormData(prev => ({ ...prev, maxCapacity: 15 }))
+                      setMaxCapacityInput(String(DEFAULT_BOX_CAPACITY))
+                      setFormData(prev => ({ ...prev, maxCapacity: DEFAULT_BOX_CAPACITY }))
                     }
                   }}
                   placeholder="15"
@@ -457,7 +458,7 @@ export default function AdminBoxesPage() {
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-blue-600" />
                     <span className="text-sm text-blue-600">
-                      Capacidad: {box.max_capacity || 15} prendas
+                      Capacidad: {getBoxMaxCapacity(box)} prendas
                     </span>
                   </div>
 
