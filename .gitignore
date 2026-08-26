@@ -44,3 +44,6 @@ next-env.d.ts
 Trace-*.json
 *.cpuprofile
 *.heapsnapshot
+
+# capturas de pantalla y material de apoyo local
+Imagenes/
