@@ -20,6 +20,7 @@ const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanne
 })
 import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X, Camera } from 'lucide-react'
 import type { Garment, Box } from '@/types'
+import { getBoxMaxCapacity } from '@/utils/box-capacity'
 
 export default function AdminOrganizePage() {
   const { userProfile } = useAuth()
@@ -395,7 +396,7 @@ export default function AdminOrganizePage() {
 
       // Si la caja se llenará, buscar la más vacía
       const selectedBox = boxes.find(b => b.id === selectedBoxForBatch)
-      const selectedBoxMaxCapacity = selectedBox ? getBoxMaxCapacity(selectedBox) : 15
+      const selectedBoxMaxCapacity = getBoxMaxCapacity(selectedBox)
       let targetBoxId = selectedBoxForBatch
       if (newCount > selectedBoxMaxCapacity) {
         // Buscar caja más vacía
@@ -491,9 +492,6 @@ export default function AdminOrganizePage() {
     if (!batchCodes.trim()) return 0
     return batchCodes.split(/[/,\n\r\t; ]+/).filter(c => c.trim().length > 0).length
   }, [batchCodes])
-
-  // ✅ Helper para obtener capacidad máxima de una caja
-  const getBoxMaxCapacity = (box: Box) => box.max_capacity || 15
 
   // Función para obtener cajas recomendadas (< 60% de capacidad)
   const getRecommendedBoxes = () => {

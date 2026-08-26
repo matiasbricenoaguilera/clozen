@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle, LogOut, LogIn } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
+import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
 import { toast } from '@/hooks/use-toast'
 import type { Garment, Box, WeatherData } from '@/types'
 
@@ -73,7 +74,7 @@ export default function ClosetPage() {
   const [selectedBoxForBatch, setSelectedBoxForBatch] = useState<string>('')
   const [assigningBox, setAssigningBox] = useState(false)
   const [hasEnoughSpace, setHasEnoughSpace] = useState(true)
-  const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number } | null>(null)
+  const [selectedBoxInfo, setSelectedBoxInfo] = useState<{ name: string; location?: string; currentCount: number; availableSpace: number; maxCapacity: number } | null>(null)
   const [showWithdrawScanner, setShowWithdrawScanner] = useState(false)
   const [showIngressScanner, setShowIngressScanner] = useState(false)
   const [scannedGarmentForIngress, setScannedGarmentForIngress] = useState<Garment | null>(null)
@@ -162,14 +163,14 @@ export default function ClosetPage() {
       // Obtener todas las cajas
       const { data, error } = await supabase
         .from('boxes')
-        .select('id, name')
+        .select('id, name, max_capacity')
         .order('name')
 
       if (error) throw error
 
       // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
       // en lugar de traer TODOS los box_id (puede ser miles de registros)
-      const boxIds = (data || []).map((box: { id: string; name: string }) => box.id)
+      const boxIds = (data || []).map((box: { id: string; name: string; max_capacity?: number }) => box.id)
       
       // Si no hay cajas, retornar vacío
       if (boxIds.length === 0) {
@@ -648,17 +649,14 @@ export default function ClosetPage() {
       }
       
       // ✅ VALIDACIÓN DE CAPACIDAD MÁXIMA
-      const maxCapacity = box.max_capacity || 15
+      const maxCapacity = getBoxMaxCapacity(box)
       const currentCount = box.garment_count || 0
       const isFull = currentCount >= maxCapacity
       
       if (isFull) {
         // Buscar una caja alternativa disponible
         const availableBoxes = boxes
-          .filter(b => {
-            const maxCap = b.max_capacity || 15
-            return (b.garment_count || 0) < maxCap
-          })
+          .filter(b => !isBoxFull(b))
           .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
         
         if (availableBoxes.length > 0) {
@@ -707,7 +705,7 @@ export default function ClosetPage() {
         .eq('status', 'available')
 
       const targetBox = boxes.find(b => b.id === selectedBoxForIngress)
-      const maxCapacity = targetBox?.max_capacity || 15
+      const maxCapacity = getBoxMaxCapacity(targetBox)
       const currentBoxCount = currentCount || 0
 
       if (currentBoxCount >= maxCapacity) {
@@ -959,7 +957,7 @@ export default function ClosetPage() {
     
     // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
     const availableBoxes = boxesWithCount
-      .filter(box => (box.garment_count || 0) < 15)
+      .filter(box => !isBoxFull(box))
       .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
     
     return availableBoxes.length > 0 ? availableBoxes[0] : null
@@ -987,14 +985,15 @@ export default function ClosetPage() {
       // Contar todas las prendas que se van a asignar (incluyendo las que están en uso)
       const garmentsToAssign = foundGarmentsBatch.length
       const newCount = currentBoxCount + garmentsToAssign
+      const selectedBoxCapacity = getBoxMaxCapacity(boxes.find(b => b.id === selectedBoxForBatch))
 
       // Determinar la caja a usar
       let targetBoxId = selectedBoxForBatch
       let boxChanged = false
 
       // Si la caja seleccionada está llena o se llenará, buscar la más vacía
-      if (newCount > 15) {
-        console.log(`⚠️ Caja seleccionada se llenará (${newCount} > 15), buscando caja más vacía...`)
+      if (newCount > selectedBoxCapacity) {
+        console.log(`⚠️ Caja seleccionada se llenará (${newCount} > ${selectedBoxCapacity}), buscando caja más vacía...`)
         const mostEmptyBox = await findMostEmptyBox()
         
         if (mostEmptyBox) {
@@ -1007,14 +1006,15 @@ export default function ClosetPage() {
           
           const emptyBoxCurrentCount = emptyBoxCount || 0
           const emptyBoxNewCount = emptyBoxCurrentCount + garmentsToAssign
+          const emptyBoxCapacity = getBoxMaxCapacity(mostEmptyBox)
           
-          if (emptyBoxNewCount <= 15) {
+          if (emptyBoxNewCount <= emptyBoxCapacity) {
             targetBoxId = mostEmptyBox.id
             boxChanged = true
             console.log(`✅ Cambiando a caja más vacía: "${mostEmptyBox.name}" (${emptyBoxCurrentCount} prendas)`)
           } else {
             // Si incluso la más vacía se llenaría, dividir entre múltiples cajas o mostrar error
-            setNfcError(`❌ No hay cajas con suficiente espacio. Se necesitan ${garmentsToAssign} espacios pero la caja más vacía solo tiene ${15 - emptyBoxCurrentCount} espacios disponibles.`)
+            setNfcError(`❌ No hay cajas con suficiente espacio. Se necesitan ${garmentsToAssign} espacios pero la caja más vacía solo tiene ${Math.max(0, emptyBoxCapacity - emptyBoxCurrentCount)} espacios disponibles.`)
             setAssigningBox(false)
             return
           }
@@ -1756,15 +1756,17 @@ export default function ClosetPage() {
                             
                             const currentCount = count || 0
                             const garmentsToAssign = foundGarmentsBatch.length
-                            const availableSpace = 15 - currentCount
+                            const box = boxes.find(b => b.id === value)
+                            const maxCapacity = getBoxMaxCapacity(box)
+                            const availableSpace = Math.max(0, maxCapacity - currentCount)
                             const willFit = garmentsToAssign <= availableSpace
                             
-                            const box = boxes.find(b => b.id === value)
                             setSelectedBoxInfo(box ? {
                               name: box.name,
                               location: (box as any).location,
                               currentCount,
-                              availableSpace
+                              availableSpace,
+                              maxCapacity
                             } : null)
                             setHasEnoughSpace(willFit)
                             
@@ -1779,7 +1781,8 @@ export default function ClosetPage() {
                                   .eq('status', 'available')
                                 
                                 const emptyCurrentCount = emptyCount || 0
-                                const emptyAvailableSpace = 15 - emptyCurrentCount
+                                const emptyMaxCapacity = getBoxMaxCapacity(mostEmptyBox)
+                                const emptyAvailableSpace = Math.max(0, emptyMaxCapacity - emptyCurrentCount)
                                 
                                 if (garmentsToAssign <= emptyAvailableSpace) {
                                   setSelectedBoxForBatch(mostEmptyBox.id)
@@ -1787,7 +1790,8 @@ export default function ClosetPage() {
                                     name: mostEmptyBox.name,
                                     location: (mostEmptyBox as any).location,
                                     currentCount: emptyCurrentCount,
-                                    availableSpace: emptyAvailableSpace
+                                    availableSpace: emptyAvailableSpace,
+                                    maxCapacity: emptyMaxCapacity
                                   })
                                   setHasEnoughSpace(true)
                                 }
@@ -1806,8 +1810,9 @@ export default function ClosetPage() {
                           <SelectItem value="none">Sin caja</SelectItem>
                           {boxes.map(box => {
                             const count = (box as any).garment_count ?? 0
-                            const isFull = count >= 15
-                            const availableSpace = 15 - count
+                            const maxCapacity = getBoxMaxCapacity(box)
+                            const isFull = count >= maxCapacity
+                            const availableSpace = Math.max(0, maxCapacity - count)
                             const willFit = foundGarmentsBatch.length <= availableSpace
                             
                             return (
@@ -1817,7 +1822,7 @@ export default function ClosetPage() {
                                 disabled={isFull || !willFit}
                                 className={isFull || !willFit ? 'opacity-50' : ''}
                               >
-                                {box.name} {count > 0 && `(${count}/15)`} 
+                                {box.name} {count > 0 && `(${count}/${maxCapacity})`} 
                                 {isFull && ' - LLENA'}
                                 {!isFull && !willFit && ` - NO CABEN ${foundGarmentsBatch.length} prendas`}
                               </SelectItem>
@@ -1862,7 +1867,7 @@ export default function ClosetPage() {
                                   : 'text-red-700 dark:text-red-300'
                               }`}>
                                 {hasEnoughSpace 
-                                  ? `✅ Espacio disponible: ${selectedBoxInfo.availableSpace} prendas (${selectedBoxInfo.currentCount}/15 ocupadas)`
+                                  ? `✅ Espacio disponible: ${selectedBoxInfo.availableSpace} prendas (${selectedBoxInfo.currentCount}/${selectedBoxInfo.maxCapacity} ocupadas)`
                                   : `❌ No hay suficiente espacio. Disponible: ${selectedBoxInfo.availableSpace} prendas, Necesitas: ${foundGarmentsBatch.length} prendas`
                                 }
                               </p>
@@ -2178,7 +2183,7 @@ export default function ClosetPage() {
                   <SelectContent>
                     {boxes.map(box => {
                       const count = box.garment_count ?? 0
-                      const maxCapacity = box.max_capacity || 15
+                      const maxCapacity = getBoxMaxCapacity(box)
                       const isFull = count >= maxCapacity
                       return (
                         <SelectItem

@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Nuevo `VERIFICAR_SEGURIDAD.sql`**: 10 comprobaciones con veredicto ✅/❌ para validar que los parches están aplicados
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
+### Fixed
+- **La capacidad máxima editada de una caja se ignoraba y siempre se aplicaba el límite de 15 prendas**
+  - Causa raíz: `/closet` pedía las cajas con `select('id, name')`, sin la columna `max_capacity`, así que todos los `box.max_capacity || 15` caían al valor por defecto. Afectaba al escaneo NFC de caja, a la confirmación de ingreso y al selector de cajón
+  - Además, el alta de prendas (`/closet/add`) y la asignación por lote de `/closet` tenían el 15 escrito a mano, ignorando `max_capacity` aunque el dato sí llegara
+  - Nueva `utils/box-capacity.ts` con `DEFAULT_BOX_CAPACITY`, `getBoxMaxCapacity()`, `getBoxAvailableSpace()` e `isBoxFull()` como fuente única del límite; `/admin/organize` pasa a usarla en lugar de su copia local
+  - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
+
 ### Changed
 - **Actualizado Next.js de 16.1.1 a 16.3.2** y `eslint-config-next` a juego
   - Resueltas 16 vulnerabilidades de dependencias (1 crítica, 11 altas) hasta dejar `npm audit` en 0

@@ -25,6 +25,7 @@ import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/ga
 import { toast } from '@/hooks/use-toast'
 import { getFreshAccessToken } from '@/lib/session'
 import { isHeic, heicToJpeg } from '@/lib/image-format'
+import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
 
 export default function AddGarmentPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -558,18 +559,19 @@ export default function AddGarmentPage() {
       // Validar capacidad de la caja antes de guardar
       if (formData.boxId) {
         const selectedBox = boxes.find(b => b.id === formData.boxId)
-        if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+        if (selectedBox && isBoxFull(selectedBox)) {
+          const maxCapacity = getBoxMaxCapacity(selectedBox)
           // Encontrar la caja más vacía
           const availableBoxes = boxes
-            .filter(box => (box.garment_count || 0) < 15)
+            .filter(box => !isBoxFull(box))
             .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
           
           const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
           
           if (mostEmptyBox) {
-            setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
           } else {
-            setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
           }
           setSaving(false)
           return
@@ -1228,18 +1230,19 @@ export default function AddGarmentPage() {
                     value={formData.boxId}
                     onValueChange={(value) => {
                       const selectedBox = boxes.find(b => b.id === value)
-                      if (selectedBox && (selectedBox.garment_count || 0) >= 15) {
+                      if (selectedBox && isBoxFull(selectedBox)) {
+                        const maxCapacity = getBoxMaxCapacity(selectedBox)
                         // Encontrar la caja más vacía
                         const availableBoxes = boxes
-                          .filter(box => (box.garment_count || 0) < 15)
+                          .filter(box => !isBoxFull(box))
                           .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
                         
                         const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
                         
                         if (mostEmptyBox) {
-                          setError(`❌ Esta caja está llena (máximo 15 prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+                          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
                         } else {
-                          setError('❌ Esta caja está llena (máximo 15 prendas) y no hay otras cajas disponibles.')
+                          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
                         }
                         // No cambiar el valor si la caja está llena
                         return
@@ -1256,7 +1259,8 @@ export default function AddGarmentPage() {
                     <SelectContent>
                       {boxes.map(box => {
                         const count = box.garment_count ?? 0
-                        const isFull = count >= 15
+                        const maxCapacity = getBoxMaxCapacity(box)
+                        const isFull = count >= maxCapacity
                         return (
                           <SelectItem 
                             key={box.id} 
@@ -1265,7 +1269,7 @@ export default function AddGarmentPage() {
                             className={isFull ? 'opacity-50' : ''}
                           >
                             {box.name}
-                            {count > 0 && ` (${count}/15)`}
+                            {count > 0 && ` (${count}/${maxCapacity})`}
                             {isFull && ' - LLENA'}
                           </SelectItem>
                         )
