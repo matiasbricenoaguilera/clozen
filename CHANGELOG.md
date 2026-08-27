@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Nueva `utils/box-capacity.ts` con `DEFAULT_BOX_CAPACITY`, `getBoxMaxCapacity()`, `getBoxAvailableSpace()` e `isBoxFull()` como fuente única del límite; `/admin/organize` pasa a usarla en lugar de su copia local y `/admin/boxes` toma de ahí el valor por defecto del formulario
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
+### Added
+- **El límite de capacidad de las cajas se aplica ahora en Postgres**, no solo en el navegador: nuevo `LIMITE_CAPACIDAD_CAJAS.sql`
+  - Trigger `enforce_box_capacity` (BEFORE INSERT OR UPDATE en `garments`) que cuenta las prendas disponibles de la caja destino y rechaza el cambio si supera `max_capacity`
+  - Usa `pg_advisory_xact_lock` sobre la caja: dos ingresos simultáneos ya no pueden contar ambos 14 huecos y guardar los dos
+  - Trigger `touch_updated_at` para que `updated_at` deje de depender de que el cliente se acuerde
+  - El rechazo del trigger llega a la UI como un error de capacidad normal ("La caja X está llena: 30 de 30 prendas"), tanto al mover como al dar de alta una prenda
+  - El script incluye una consulta que saca a la luz las cajas que ya estuvieran por encima de su límite
+
 ### Changed
 - **Las reglas de retirar, ingresar y mover viven en `lib/garments-repo.ts`**, no repartidas por las pantallas: `retirarPrendas()`, `asignarPrendasACaja()` y `quitarPrendasDeCaja()`
   - `retirarPrendas()` comprueba el permiso (un admin puede retirar prendas de cualquiera), suma el uso, suelta la caja y registra el historial **a nombre del dueño de la prenda**, no del admin. Antes cada una de las tres pantallas que retiraban hacía una parte distinta

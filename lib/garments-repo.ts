@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/supabase'
-import { countBoxOccupancy, assertBoxHasSpace } from '@/utils/box-capacity'
+import { countBoxOccupancy, assertBoxHasSpace, BoxCapacityError } from '@/utils/box-capacity'
 
 type GarmentPatch = Database['public']['Tables']['garments']['Update']
 
@@ -15,6 +15,19 @@ export class GarmentUpdateError extends Error {
     this.name = 'GarmentUpdateError'
     this.detalle = detalle
   }
+}
+
+/**
+ * Traduce el rechazo del trigger `enforce_box_capacity` (LIMITE_CAPACIDAD_CAJAS.sql)
+ * a un `BoxCapacityError`, para que la UI lo muestre como un problema de
+ * capacidad y no como un error genérico de guardado.
+ */
+function comoErrorDeCapacidad(error: { code?: string; message?: string }): BoxCapacityError | null {
+  const esViolacionDeCheck = error.code === '23514' || error.code === 'P0001'
+  if (esViolacionDeCheck && error.message?.includes('está llena')) {
+    return new BoxCapacityError(error.message)
+  }
+  return null
 }
 
 /**
@@ -46,6 +59,10 @@ export async function updateGarments(
 
   if (error) {
     console.error('❌ Error al actualizar prendas:', { ids: idsUnicos, patch, error })
+
+    const errorDeCapacidad = comoErrorDeCapacidad(error)
+    if (errorDeCapacidad) throw errorDeCapacidad
+
     throw new GarmentUpdateError(
       `No se pudo guardar el cambio: ${error.message || 'error desconocido'}`,
       error

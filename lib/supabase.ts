@@ -35,19 +35,23 @@ const RESPUESTA_DEMO = { data: null, error: { message: 'Supabase no configurado'
  * Es "thenable": un `await` sobre él resuelve la respuesta de demo, se haya
  * llamado a `.single()` o no.
  */
-function crearQueryDemo(): any {
-  const query: any = new Proxy(
-    {
-      then: (resolve: (valor: typeof RESPUESTA_DEMO) => void) => resolve(RESPUESTA_DEMO)
-    },
-    {
-      get(target, prop) {
-        if (prop in target) return (target as any)[prop]
-        // Cualquier otro método del constructor de queries devuelve la cadena
-        return () => query
-      }
+type QueryDemo = {
+  then: (resolve: (valor: typeof RESPUESTA_DEMO) => void) => void
+} & Record<string, unknown>
+
+function crearQueryDemo(): QueryDemo {
+  const base: QueryDemo = {
+    then: (resolve: (valor: typeof RESPUESTA_DEMO) => void) => resolve(RESPUESTA_DEMO)
+  }
+
+  const query: QueryDemo = new Proxy(base, {
+    get(target, prop) {
+      if (prop in target) return target[prop as string]
+      // Cualquier otro método del constructor de queries devuelve la cadena
+      return () => query
     }
-  )
+  })
+
   return query
 }
 

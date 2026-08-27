@@ -707,7 +707,10 @@ export default function AddGarmentPage() {
       // Mejor manejo de errores para el usuario
       let errorMessage = 'Error al guardar la prenda'
 
-      if (error.code === '23505') {
+      if ((error.code === '23514' || error.code === 'P0001') && error.message?.includes('está llena')) {
+        // Rechazo del trigger de capacidad (LIMITE_CAPACIDAD_CAJAS.sql)
+        errorMessage = `❌ ${error.message} Elige otra caja para esta prenda.`
+      } else if (error.code === '23505') {
         // Violación de restricción única
         if (error.message?.includes('barcode_id')) {
           errorMessage = 'El código de barras ya está en uso. Por favor, usa un código diferente o elimina el código de barras.'
