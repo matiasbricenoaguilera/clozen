@@ -121,16 +121,24 @@ export async function updateEntityNFCTag(
   try {
     const table = entityType === 'garment' ? 'garments' : 'boxes'
 
-    const { error: updateError } = await supabase
+    // `.select()` para saber si la fila se actualizó de verdad: sin él, RLS puede
+    // rechazar la escritura y PostgREST responde 200 sin error y con cero filas
+    const { data: updated, error: updateError } = await supabase
       .from(table)
       .update({
         nfc_tag_id: newTagId,
         updated_at: new Date().toISOString()
       })
       .eq('id', entityId)
+      .select('id')
 
     if (updateError) {
       console.error('Error updating entity NFC tag:', updateError)
+      return false
+    }
+
+    if (!updated || updated.length === 0) {
+      console.error('El tag NFC no se guardó: la entidad no existe o no tienes permiso', { table, entityId })
       return false
     }
 
@@ -171,17 +179,23 @@ export async function removeEntityNFCTag(
       return false
     }
 
-    // Actualizar el tag a null
-    const { error: updateError } = await supabase
+    // Actualizar el tag a null (con `.select()` para confirmar que se aplicó)
+    const { data: updated, error: updateError } = await supabase
       .from(table)
       .update({
         nfc_tag_id: null,
         updated_at: new Date().toISOString()
       })
       .eq('id', entityId)
+      .select('id')
 
     if (updateError) {
       console.error('Error removing entity NFC tag:', updateError)
+      return false
+    }
+
+    if (!updated || updated.length === 0) {
+      console.error('El tag NFC no se liberó: la entidad no existe o no tienes permiso', { table, entityId })
       return false
     }
 

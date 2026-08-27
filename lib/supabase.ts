@@ -48,9 +48,14 @@ export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith
         insert: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
         update: () => ({
           eq: () => ({
-            select: () => ({
-              single: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
-            })
+            select: () => Object.assign(
+              Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
+              { single: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }) }
+            )
+          }),
+          // `updateGarments` (lib/garments-repo.ts) encadena .in(...).select('id')
+          in: () => ({
+            select: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
           })
         }),
         delete: () => ({

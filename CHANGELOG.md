@@ -45,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
 ### Fixed
+- **Los cambios sobre prendas podían no guardarse sin que la app lo dijera**: al mover una prenda de caja aparecía "✅ Prenda movida exitosamente" aunque no se hubiera guardado nada
+  - Causa: PostgREST responde **200 con cero filas y sin error** cuando RLS deja pasar la petición pero ninguna fila supera la política. Las 11 escrituras sobre `garments` comprobaban solo `error`, nunca cuántas filas se habían modificado
+  - Nueva `lib/garments-repo.ts` con `updateGarments(ids, patch)` / `updateGarment(id, patch)`: añaden `.select('id')`, comparan las filas devueltas con los ids enviados y lanzan `GarmentUpdateError` con un mensaje mostrable ("La prenda ya no existe o tu usuario no tiene permiso para modificarla")
+  - Migradas las 11 llamadas: retirar (individual, lote y desde recomendaciones), ingresar, asignar caja por lote, editar prenda, organizar tras escanear, mover entre cajas, quitar de caja y restaurar desde *En uso*
+  - Los mensajes genéricos ("Error al mover la prenda") pasan a mostrar la causa real, y los flujos que solo hacían `console.error` (retiro múltiple, restaurar, usar outfit) ahora avisan con un toast
+  - Misma comprobación en `utils/nfc.ts` (asociar/liberar tag) y en la edición de cajas de `/admin/boxes`
+  - `updated_at` lo pone ahora el repositorio, así que deja de faltar en 4 de las escrituras
+  - Ampliado el cliente dummy del modo demo con `.update().in().select()`, que la nueva cadena necesita
 - **La capacidad máxima editada de una caja se ignoraba y siempre se aplicaba el límite de 15 prendas**
   - Causa raíz: `/closet` pedía las cajas con `select('id, name')`, sin la columna `max_capacity`, así que todos los `box.max_capacity || 15` caían al valor por defecto. Afectaba al escaneo NFC de caja, a la confirmación de ingreso y al selector de cajón
   - Además, el alta de prendas (`/closet/add`), el modal **Editar Prenda** (`components/garments/edit-garment-modal.tsx`) y la asignación por lote de `/closet` tenían el 15 escrito a mano, ignorando `max_capacity` aunque el dato sí llegara

@@ -13,6 +13,8 @@ import { getWeatherByCity } from '@/utils/weather'
 import { WeatherData, Garment, Box } from '@/types'
 import { Shirt, Sparkles, Cloud, Package, Hand, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { updateGarment } from '@/lib/garments-repo'
+import { toast } from '@/hooks/use-toast'
 
 // Lazy load componentes pesados
 const WeatherCard = dynamic(() => import('@/components/weather/weather-card').then(mod => ({ default: mod.WeatherCard })), {
@@ -159,16 +161,11 @@ export default function RecommendationsPage() {
         // 2. Incrementar y actualizar
         const newUsageCount = (currentGarment?.usage_count || 0) + 1
 
-        const { error: updateError } = await supabase
-          .from('garments')
-          .update({
-            status: 'in_use',
-            last_used: new Date().toISOString(),
-            usage_count: newUsageCount
-          })
-          .eq('id', garment.id)
-
-        if (updateError) throw updateError
+        await updateGarment(garment.id, {
+          status: 'in_use',
+          last_used: new Date().toISOString(),
+          usage_count: newUsageCount
+        })
 
         // 3. Registrar en historial de uso
         await supabase
@@ -190,6 +187,9 @@ export default function RecommendationsPage() {
       console.log('✅ Outfit utilizado exitosamente')
     } catch (error) {
       console.error('❌ Error al usar outfit:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'No se pudo registrar el outfit. Inténtalo de nuevo.'
+      )
     } finally {
       setLoadingRecommendations(false)
     }

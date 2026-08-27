@@ -88,7 +88,9 @@ export default function AdminBoxesPage() {
     try {
       if (editingBox) {
         // Actualizar caja existente
-        const { error } = await supabase
+        // `.select()` para confirmar que la fila se actualizó: si RLS rechaza la
+        // escritura, PostgREST responde 200 sin error y con cero filas
+        const { data: updated, error } = await supabase
           .from('boxes')
           .update({
             name: formData.name,
@@ -98,8 +100,13 @@ export default function AdminBoxesPage() {
             max_capacity: formData.maxCapacity || DEFAULT_BOX_CAPACITY
           })
           .eq('id', editingBox.id)
+          .select('id')
 
         if (error) throw error
+
+        if (!updated || updated.length === 0) {
+          throw new Error('Los cambios no se guardaron. La caja ya no existe o tu usuario no tiene permiso para modificarla.')
+        }
 
         // Si hay un tag NFC, actualizar o crear registro en nfc_tags
         if (formData.nfcTagId) {

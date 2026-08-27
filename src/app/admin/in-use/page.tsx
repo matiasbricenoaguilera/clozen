@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Shirt, RefreshCw, Calendar, User, Copy, Check, RotateCcw, Package, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { updateGarment } from '@/lib/garments-repo'
+import { toast } from '@/hooks/use-toast'
 
 interface InUseGarment {
   id: string
@@ -144,16 +146,10 @@ export default function AdminInUsePage() {
       if (fetchError) throw fetchError
 
       // Restaurar la prenda (cambiar status a 'available' y quitar caja asignada)
-      const { error: updateError } = await supabase
-        .from('garments')
-        .update({
-          status: 'available',
-          box_id: null, // Quitar caja asignada al restaurar
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', garmentId)
-
-      if (updateError) throw updateError
+      await updateGarment(garmentId, {
+        status: 'available',
+        box_id: null // Quitar caja asignada al restaurar
+      })
 
       // Mostrar información - siempre sin caja después de restaurar
       setRestoredGarmentInfo({
@@ -173,6 +169,9 @@ export default function AdminInUsePage() {
       console.log('✅ Prenda restaurada exitosamente')
     } catch (error) {
       console.error('❌ Error al restaurar prenda:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'No se pudo restaurar la prenda. Inténtalo de nuevo.'
+      )
     } finally {
       setRestoringGarmentId(null)
     }

@@ -15,6 +15,7 @@ import { FileUpload } from '@/components/ui/file-upload'
 import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
+import { updateGarment } from '@/lib/garments-repo'
 
 const GARMENT_TYPES = [
   'camisa', 'pantalon', 'vestido', 'falda', 'chaqueta', 'abrigo',
@@ -427,16 +428,10 @@ export function EditGarmentModal({
         box_id: formData.box_id || null,
         image_url: imageUrl,
         nfc_tag_id: normalizedNfcTag,
-        barcode_id: normalizedBarcode,
-        updated_at: new Date().toISOString()
+        barcode_id: normalizedBarcode
       }
 
-      const { error: updateError } = await supabase
-        .from('garments')
-        .update(updateData)
-        .eq('id', garment.id)
-
-      if (updateError) throw updateError
+      await updateGarment(garment.id, updateData)
 
       onSuccess()
       onOpenChange(false)

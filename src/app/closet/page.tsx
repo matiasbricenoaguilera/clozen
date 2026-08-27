@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle, LogOut, LogIn } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
 import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
+import { updateGarment, updateGarments } from '@/lib/garments-repo'
 import { toast } from '@/hooks/use-toast'
 import type { Garment, Box, WeatherData } from '@/types'
 
@@ -393,16 +394,11 @@ export default function ClosetPage() {
         const garmentOwnerId = currentGarment?.user_id || userProfile.id
 
         // Actualizar prenda
-        const { error: updateError } = await supabase
-          .from('garments')
-          .update({
-            status: 'in_use',
-            last_used: new Date().toISOString(),
-            usage_count: newUsageCount
-          })
-          .eq('id', garmentId)
-
-        if (updateError) throw updateError
+        await updateGarment(garmentId, {
+          status: 'in_use',
+          last_used: new Date().toISOString(),
+          usage_count: newUsageCount
+        })
 
         // Registrar en historial
         await supabase
@@ -425,6 +421,11 @@ export default function ClosetPage() {
       console.log('✅ Prendas retiradas exitosamente')
     } catch (error) {
       console.error('❌ Error al retirar prendas:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'No se pudieron retirar las prendas. Inténtalo de nuevo.'
+      )
+      // Recargar para que la vista refleje lo que sí se guardó
+      await Promise.all([fetchGarments(), fetchForgottenGarments()])
     }
   }
 
@@ -440,7 +441,13 @@ export default function ClosetPage() {
   // Función para confirmar el retiro después de mostrar ubicación (mantener para compatibilidad)
   const confirmWithdraw = async () => {
     if (selectedGarmentForWithdraw) {
-      await withdrawGarment(selectedGarmentForWithdraw.id)
+      try {
+        await withdrawGarment(selectedGarmentForWithdraw.id)
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'No se pudo retirar la prenda. Inténtalo de nuevo.'
+        )
+      }
       setShowLocationModal(false)
       setSelectedGarmentForWithdraw(null)
     }
@@ -473,17 +480,12 @@ export default function ClosetPage() {
       const newUsageCount = (currentGarment?.usage_count || 0) + 1
       const garmentOwnerId = currentGarment?.user_id || userProfile.id
 
-      const { error: updateError } = await supabase
-        .from('garments')
-        .update({
-          status: 'in_use',
-          last_used: new Date().toISOString(),
-          usage_count: newUsageCount,
-          box_id: null // Remover de la caja al retirar
-        })
-        .eq('id', garmentId)
-
-      if (updateError) throw updateError
+      await updateGarment(garmentId, {
+        status: 'in_use',
+        last_used: new Date().toISOString(),
+        usage_count: newUsageCount,
+        box_id: null // Remover de la caja al retirar
+      })
 
       // 3. Registrar en historial de uso (usar el dueño de la prenda, no el admin)
       await supabase
@@ -715,16 +717,10 @@ export default function ClosetPage() {
       }
 
       // Actualizar prenda: asignar cajón y cambiar status a available
-      const { error } = await supabase
-        .from('garments')
-        .update({
-          box_id: selectedBoxForIngress,
-          status: 'available',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', scannedGarmentForIngress.id)
-
-      if (error) throw error
+      await updateGarment(scannedGarmentForIngress.id, {
+        box_id: selectedBoxForIngress,
+        status: 'available'
+      })
 
       // Refrescar datos
       await fetchGarments()
@@ -736,7 +732,9 @@ export default function ClosetPage() {
       console.log('✅ Prenda ingresada exitosamente')
     } catch (error) {
       console.error('Error al ingresar prenda:', error)
-      setNfcError('Error al ingresar la prenda. Inténtalo de nuevo.')
+      setNfcError(
+        error instanceof Error ? `❌ ${error.message}` : 'Error al ingresar la prenda. Inténtalo de nuevo.'
+      )
     } finally {
       setIngressingGarment(false)
     }
@@ -1030,19 +1028,10 @@ export default function ClosetPage() {
       
       // Actualizar todas las prendas: asignar caja y restaurar las que están en uso
       // IMPORTANTE: No modificar nfc_tag_id ni barcode_id, solo box_id y status
-      const { error } = await supabase
-        .from('garments')
-        .update({
-          box_id: targetBoxId,
-          status: 'available', // Restaurar todas las prendas a 'available'
-          updated_at: new Date().toISOString()
-        })
-        .in('id', garmentIds)
-
-      if (error) {
-        console.error('Error updating garments:', error)
-        throw error
-      }
+      await updateGarments(garmentIds, {
+        box_id: targetBoxId,
+        status: 'available' // Restaurar todas las prendas a 'available'
+      })
 
       // Verificar que los códigos no se perdieron
       const { data: updatedGarments } = await supabase

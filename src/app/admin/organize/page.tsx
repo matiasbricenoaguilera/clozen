@@ -21,6 +21,7 @@ const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanne
 import { Shirt, Package, Smartphone, Scan, CheckCircle, AlertCircle, Search, X, Camera } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 import { getBoxMaxCapacity } from '@/utils/box-capacity'
+import { updateGarment, updateGarments } from '@/lib/garments-repo'
 
 export default function AdminOrganizePage() {
   const { userProfile } = useAuth()
@@ -416,15 +417,10 @@ export default function AdminOrganizePage() {
       const inUseGarments = foundGarmentsBatch.filter(g => g.status === 'in_use')
 
       // Actualizar todas las prendas
-      const { error: updateError } = await supabase
-        .from('garments')
-        .update({
-          box_id: targetBoxId,
-          status: 'available'
-        })
-        .in('id', garmentIds)
-
-      if (updateError) throw updateError
+      await updateGarments(garmentIds, {
+        box_id: targetBoxId,
+        status: 'available'
+      })
 
       const targetBox = boxes.find(b => b.id === targetBoxId)
       const boxName = targetBox?.name || 'caja desconocida'
@@ -646,15 +642,7 @@ export default function AdminOrganizePage() {
         }
       }
 
-      const { error } = await supabase
-        .from('garments')
-        .update({
-          box_id: targetBoxId,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', garmentId)
-
-      if (error) throw error
+      await updateGarment(garmentId, { box_id: targetBoxId })
 
       setSuccess(`✅ Prenda ${targetBoxId ? 'movida' : 'removida'} exitosamente`)
       
@@ -668,7 +656,7 @@ export default function AdminOrganizePage() {
       setGarmentToMove(null)
     } catch (error) {
       console.error('Error moving garment:', error)
-      setError('Error al mover la prenda')
+      setError(error instanceof Error ? `❌ ${error.message}` : 'Error al mover la prenda')
     }
   }
 
@@ -706,16 +694,10 @@ export default function AdminOrganizePage() {
         }
       }
 
-      const { error: updateError } = await supabase
-        .from('garments')
-        .update({
-          box_id: targetBoxId,
-          status: 'available',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', garmentId)
-
-      if (updateError) throw updateError
+      await updateGarment(garmentId, {
+        box_id: targetBoxId,
+        status: 'available'
+      })
 
       const boxName = targetBox?.name || 'caja'
       setSuccess(`✅ Prenda organizada en "${boxName}"`)
@@ -728,7 +710,7 @@ export default function AdminOrganizePage() {
 
     } catch (error) {
       console.error('Error organizing garment:', error)
-      setError('Error al organizar la prenda')
+      setError(error instanceof Error ? `❌ ${error.message}` : 'Error al organizar la prenda')
     } finally {
       setOrganizingGarment(false)
     }
