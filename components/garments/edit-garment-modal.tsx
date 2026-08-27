@@ -4,7 +4,15 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
-import { isHeic, heicToJpeg } from '@/lib/image-format'
+import {
+  isHeic,
+  heicToJpeg,
+  compressImage,
+  rotateImage,
+  sumarRotacion,
+  storagePathFromUrl,
+  type Rotacion
+} from '@/lib/image-format'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,7 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
+import { Loader2, AlertCircle, Save, Trash2, RotateCcw, RotateCw } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 import { getBoxMaxCapacity, getBoxAvailableSpace, isBoxFull, findMostEmptyBox, withOccupancy } from '@/utils/box-capacity'
 import { updateGarment, deleteGarment } from '@/lib/garments-repo'
@@ -65,6 +73,8 @@ export function EditGarmentModal({
   })
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  /** Giro pendiente de aplicar. Se acumula en el preview y se graba al guardar */
+  const [rotacion, setRotacion] = useState<Rotacion>(0)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState('')
@@ -106,6 +116,7 @@ export function EditGarmentModal({
       })
       setImagePreview(garment.image_url || null)
       setSelectedImage(null)
+      setRotacion(0)
       setError('')
     }
   }, [garment, open])
@@ -240,6 +251,7 @@ export function EditGarmentModal({
     }
 
     setSelectedImage(file)
+    setRotacion(0)
     if (file) {
       const reader = new FileReader()
       reader.onloadend = () => {
@@ -253,57 +265,6 @@ export function EditGarmentModal({
 
   const handleFileSelect = (file: File) => {
     handleImageSelect(file)
-  }
-
-  const compressImage = async (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = (e) => {
-        const img = document.createElement('img')
-        img.src = e.target?.result as string
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const MAX_WIDTH = 1200
-          const MAX_HEIGHT = 1200
-          let width = img.width
-          let height = img.height
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width
-              width = MAX_WIDTH
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height
-              height = MAX_HEIGHT
-            }
-          }
-
-          canvas.width = width
-          canvas.height = height
-          const ctx = canvas.getContext('2d')
-          ctx?.drawImage(img, 0, 0, width, height)
-
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                const compressedFile = new File([blob], file.name, {
-                  type: 'image/jpeg',
-                  lastModified: Date.now()
-                })
-                resolve(compressedFile)
-              } else {
-                resolve(file)
-              }
-            },
-            'image/jpeg',
-            0.8
-          )
-        }
-      }
-    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -321,10 +282,38 @@ export function EditGarmentModal({
 
     try {
       let imageUrl = garment.image_url
+      /** Archivo antiguo a borrar del Storage una vez guardado el cambio */
+      let imagenAReemplazar: string | null = null
 
-      // Subir nueva imagen si se seleccionó una
-      if (selectedImage) {
-        const compressedImage = await compressImage(selectedImage)
+      // Foto nueva, o la de siempre girada: en ambos casos se sube un archivo
+      let imagenASubir: File | null = selectedImage
+
+      if (!imagenASubir && rotacion !== 0 && garment.image_url) {
+        // Se descarga con el SDK en vez de hacer fetch de la URL pública:
+        // así no dependemos de CORS ni acabamos con un canvas "tainted"
+        const rutaActual = storagePathFromUrl(garment.image_url)
+        if (!rutaActual) {
+          throw new Error('No se pudo localizar la imagen actual para girarla.')
+        }
+
+        const { data: original, error: downloadError } = await supabase.storage
+          .from('garments')
+          .download(rutaActual)
+
+        if (downloadError || !original) {
+          throw new Error('No se pudo descargar la imagen para girarla. Inténtalo de nuevo.')
+        }
+
+        imagenASubir = new File([original], rutaActual.split('/').pop() || 'prenda.jpg', {
+          type: 'image/jpeg'
+        })
+        imagenAReemplazar = rutaActual
+      }
+
+      // Subir la imagen (nueva o girada)
+      if (imagenASubir) {
+        const girada = await rotateImage(imagenASubir, rotacion)
+        const compressedImage = await compressImage(girada)
         const fileExt = 'jpg'
         const fileName = `${Date.now()}-${Math.random()}.${fileExt}`
         const filePath = `garments/${garment.user_id}/${fileName}`
@@ -404,6 +393,18 @@ export function EditGarmentModal({
 
       await updateGarment(garment.id, updateData)
 
+      // Ya no la referencia nadie: si el borrado falla solo queda un huérfano
+      if (imagenAReemplazar) {
+        const { error: removeError } = await supabase.storage
+          .from('garments')
+          .remove([imagenAReemplazar])
+
+        if (removeError) {
+          console.warn('⚠️ La imagen girada se guardó, pero la anterior sigue en Storage:', removeError)
+        }
+      }
+
+      setRotacion(0)
       onSuccess()
       onOpenChange(false)
     } catch (error: any) {
@@ -673,15 +674,50 @@ export function EditGarmentModal({
               selectedFile={selectedImage}
               accept="image/*"
             />
-            {imagePreview && !selectedImage && (
-              <div className="mt-2">
-                <Image
-                  src={imagePreview}
-                  alt="Preview"
-                  width={128}
-                  height={128}
-                  className="w-32 h-32 object-cover rounded-lg"
-                />
+            {imagePreview && (
+              <div className="mt-2 flex items-start gap-3">
+                <div className="w-32 h-32 overflow-hidden rounded-lg bg-muted">
+                  <Image
+                    src={imagePreview}
+                    alt="Vista previa de la prenda"
+                    width={128}
+                    height={128}
+                    className="w-32 h-32 object-cover transition-transform duration-200"
+                    style={{ transform: `rotate(${rotacion}deg)` }}
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11"
+                      aria-label="Girar la imagen a la izquierda"
+                      onClick={() => setRotacion(prev => sumarRotacion(prev, -90))}
+                      disabled={saving || deleting}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11"
+                      aria-label="Girar la imagen a la derecha"
+                      onClick={() => setRotacion(prev => sumarRotacion(prev, 90))}
+                      disabled={saving || deleting}
+                    >
+                      <RotateCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {rotacion !== 0 && (
+                    <p className="text-xs text-muted-foreground max-w-[9rem]">
+                      El giro se aplica al guardar los cambios.
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

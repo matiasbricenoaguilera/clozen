@@ -19,12 +19,19 @@ const BarcodeScanner = dynamic(() => import('@/components/barcode/barcode-scanne
   loading: () => <div className="p-4 text-center text-muted-foreground">Cargando escáner de códigos de barras...</div>
 })
 import { DemoBanner } from '@/components/ui/demo-banner'
-import { ArrowLeft, Save, AlertCircle, Camera, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Save, AlertCircle, Camera, Sparkles, Loader2, RotateCcw, RotateCw } from 'lucide-react'
 import type { Box, GarmentForm } from '@/types'
 import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/garment-taxonomy'
 import { toast } from '@/hooks/use-toast'
 import { getFreshAccessToken } from '@/lib/session'
-import { isHeic, heicToJpeg } from '@/lib/image-format'
+import {
+  isHeic,
+  heicToJpeg,
+  compressImage,
+  rotateImage,
+  sumarRotacion,
+  type Rotacion
+} from '@/lib/image-format'
 import { getBoxMaxCapacity, getBoxAvailableSpace, isBoxFull, findMostEmptyBox, withOccupancy } from '@/utils/box-capacity'
 
 export default function AddGarmentPage() {
@@ -32,6 +39,9 @@ export default function AddGarmentPage() {
   const router = useRouter()
   const [boxes, setBoxes] = useState<Box[]>([])
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  /** Giro pendiente de aplicar. Se acumula en el preview y se graba al subir */
+  const [rotacion, setRotacion] = useState<Rotacion>(0)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [convirtiendo, setConvirtiendo] = useState(false)
   // Al catalogar en serie no se vuelve al listado: se encadena la siguiente prenda
@@ -74,6 +84,19 @@ export default function AddGarmentPage() {
     const random = Math.floor(Math.random() * 0xFFFFFFFFFFFF).toString(16)
     return `${timestamp}${random}`.toUpperCase()
   }, [])
+
+  // URL temporal para ver la foto elegida (y poder girarla) antes de subirla
+  useEffect(() => {
+    if (!selectedImage) {
+      setPreviewUrl(null)
+      return
+    }
+
+    const url = URL.createObjectURL(selectedImage)
+    setPreviewUrl(url)
+
+    return () => URL.revokeObjectURL(url)
+  }, [selectedImage])
 
   useEffect(() => {
     if (nfcMode === 'write') {
@@ -377,8 +400,9 @@ export default function AddGarmentPage() {
           name: selectedImage.name
         })
 
-        // Comprimir imagen antes del upload
-        const compressedImage = await compressImage(selectedImage)
+        // Aplicar el giro elegido y comprimir antes del upload
+        const imagenGirada = await rotateImage(selectedImage, rotacion)
+        const compressedImage = await compressImage(imagenGirada, 800)
         console.log('🗜️ Imagen comprimida:', {
           newSize: `${(compressedImage.size / 1024 / 1024).toFixed(2)}MB`,
           compressionRatio: `${((selectedImage.size - compressedImage.size) / selectedImage.size * 100).toFixed(1)}%`
@@ -756,7 +780,7 @@ export default function AddGarmentPage() {
       }
 
       // La versión comprimida basta para clasificar y es mucho más ligera de enviar
-      const compressed = await compressImage(file)
+      const compressed = await compressImage(file, 800)
 
       const body = new FormData()
       body.append('image', compressed)
@@ -849,12 +873,14 @@ export default function AddGarmentPage() {
     }
 
     setSelectedImage(imagen)
+    setRotacion(0)
     // No se espera al análisis: corre de fondo mientras se sigue rellenando
     void analyzeImage(imagen)
   }
 
   const handleImageRemove = () => {
     setSelectedImage(null)
+    setRotacion(0)
     setSuggestedFields(new Set())
   }
 
@@ -881,54 +907,6 @@ export default function AddGarmentPage() {
   }
 
   // Función para comprimir imágenes antes del upload
-  const compressImage = async (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      const img = new Image()
-
-      img.onload = () => {
-        // Calcular nuevas dimensiones (máximo 800px de ancho/alto)
-        let { width, height } = img
-        const maxDimension = 800
-
-        if (width > height) {
-          if (width > maxDimension) {
-            height = (height * maxDimension) / width
-            width = maxDimension
-          }
-        } else {
-          if (height > maxDimension) {
-            width = (width * maxDimension) / height
-            height = maxDimension
-          }
-        }
-
-        canvas.width = width
-        canvas.height = height
-
-        // Dibujar imagen redimensionada
-        ctx?.drawImage(img, 0, 0, width, height)
-
-        // Convertir a blob con compresión
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg', // Convertir siempre a JPEG para mejor compresión
-              lastModified: Date.now()
-            })
-            resolve(compressedFile)
-          } else {
-            resolve(file) // Si falla la compresión, devolver original
-          }
-        }, 'image/jpeg', 0.8) // Calidad 80%
-      }
-
-      img.onerror = () => resolve(file) // Si falla la carga, devolver original
-      img.src = URL.createObjectURL(file)
-    })
-  }
-
   const handleBarcodeSubmit = async () => {
     if (!barcodeCode.trim()) {
       setError('Ingresa un código de barras válido')
@@ -1288,6 +1266,51 @@ export default function AddGarmentPage() {
                   onFileSelect={handleImageSelect}
                   onFileRemove={handleImageRemove}
                 />
+                {previewUrl && (
+                  <div className="mt-3 flex items-start gap-3">
+                    <div className="w-32 h-32 overflow-hidden rounded-lg bg-muted">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- blob local, next/image no aplica */}
+                      <img
+                        src={previewUrl}
+                        alt="Vista previa de la prenda"
+                        className="w-32 h-32 object-cover transition-transform duration-200"
+                        style={{ transform: `rotate(${rotacion}deg)` }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11"
+                          aria-label="Girar la imagen a la izquierda"
+                          onClick={() => setRotacion(prev => sumarRotacion(prev, -90))}
+                          disabled={saving}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11"
+                          aria-label="Girar la imagen a la derecha"
+                          onClick={() => setRotacion(prev => sumarRotacion(prev, 90))}
+                          disabled={saving}
+                        >
+                          <RotateCw className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {rotacion !== 0 && (
+                        <p className="text-xs text-muted-foreground max-w-[9rem]">
+                          La foto se sube girada.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {convirtiendo && (
                   <p
                     className="mt-3 flex items-center text-sm text-muted-foreground"

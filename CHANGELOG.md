@@ -77,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
 ### Added
+- **Girar la foto de una prenda**: dos botones (↺ / ↻) junto a la vista previa, en el modal **Editar Prenda** y en el formulario de alta
+  - El giro se ve al instante en la vista previa y se graba al guardar, así que girar tres veces sigue siendo una sola subida
+  - Al editar, la imagen se descarga con `supabase.storage.download()` —no con `fetch` de la URL pública, para no depender de CORS ni acabar con un canvas *tainted*—, se gira, se sube con nombre nuevo y se borra la anterior
+  - `/closet/add` gana además la vista previa de la foto, que antes solo mostraba el nombre y el tamaño del archivo
+  - Nuevas `rotateImage()`, `sumarRotacion()` y `storagePathFromUrl()` en `lib/image-format.ts`. En 90° y 270° el lienzo intercambia ancho y alto, de forma que la foto queda derecha y sin recortar
+  - Girar vuelve a comprimir el JPEG (calidad 0.9): no es una operación sin pérdida, y por eso el giro se acumula en la vista previa en vez de aplicarse en cada clic
 - **El límite de capacidad de las cajas se aplica ahora en Postgres**, no solo en el navegador: nuevo `LIMITE_CAPACIDAD_CAJAS.sql`
   - Trigger `enforce_box_capacity` (BEFORE INSERT OR UPDATE en `garments`) que cuenta las prendas disponibles de la caja destino y rechaza el cambio si supera `max_capacity`
   - Usa `pg_advisory_xact_lock` sobre la caja: dos ingresos simultáneos ya no pueden contar ambos 14 huecos y guardar los dos
@@ -85,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - El script incluye una consulta que saca a la luz las cajas que ya estuvieran por encima de su límite
 
 ### Changed
+- **`compressImage()` deja de estar duplicado** en el alta y en el modal de edición (con criterios distintos: 800px frente a 1200px) y pasa a `lib/image-format.ts` con el tamaño como parámetro; cada pantalla conserva el suyo
 - **Las reglas de retirar, ingresar y mover viven en `lib/garments-repo.ts`**, no repartidas por las pantallas: `retirarPrendas()`, `asignarPrendasACaja()` y `quitarPrendasDeCaja()`
   - `retirarPrendas()` comprueba el permiso (un admin puede retirar prendas de cualquiera), suma el uso, suelta la caja y registra el historial **a nombre del dueño de la prenda**, no del admin. Antes cada una de las tres pantallas que retiraban hacía una parte distinta
   - `asignarPrendasACaja()` revalida la capacidad con un conteo fresco antes de escribir, y no cuenta como huecos nuevos las prendas que ya estaban en esa caja
