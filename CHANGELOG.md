@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
 ### Fixed
+- **Un tag NFC se encontraba o no según la pantalla desde la que se escaneara**: `findEntityByNFCTag()` consultaba el tag tal y como llegaba del lector, sin `trim()` ni mayúsculas, mientras que los códigos se guardan normalizados desde el alta
+  - Ahora busca probando las variantes del código (literal, sin espacios y en mayúsculas), así que encuentra también los registros antiguos que quedaron sin normalizar
+  - Nueva `normalizeNFCTag()` exportada desde `utils/nfc.ts`; asociar un tag y registrarlo en `nfc_tags` guardan siempre la forma normalizada
+  - La detección de tags duplicados de `/admin/boxes` comparaba sin normalizar, así que podía dar por libre un tag ya asignado
+  - De paso, buscar un tag inexistente deja de registrar un error PGRST116 en consola: se usa `.in(...).limit(1)` en lugar de `.single()`
 - **Eliminar una prenda o una caja podía no eliminar nada**: los `delete` tenían el mismo fallo silencioso que ya se corrigió en los `update` (200, sin error y sin filas cuando RLS lo rechaza)
   - Nuevo `deleteGarment()` en `lib/garments-repo.ts` y `.select('id')` en el borrado de cajas
 - **Eliminar una caja con prendas dentro devolvía el error crudo de Postgres** (`violates foreign key constraint`): ahora se avisa antes con "todavía tiene N prenda(s) dentro"

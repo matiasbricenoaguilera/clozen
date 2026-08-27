@@ -10,12 +10,35 @@ export interface NFCTagInfo {
 }
 
 /**
+ * Normaliza un código NFC igual que el alta de prendas: sin espacios y en
+ * mayúsculas.
+ */
+export function normalizeNFCTag(tagId: string): string {
+  return tagId.trim().toUpperCase()
+}
+
+/**
+ * Variantes con las que buscar un tag, de la más literal a la normalizada.
+ *
+ * Los códigos se guardan normalizados, pero un lector puede entregarlos con
+ * espacios o en minúsculas, y quedan registros antiguos escritos sin
+ * normalizar. Probando ambas formas se encuentra el tag en los dos casos.
+ */
+function variantesDeTag(tagId: string): string[] {
+  const variantes = [tagId, tagId.trim(), normalizeNFCTag(tagId)]
+  return Array.from(new Set(variantes.filter(variante => variante.length > 0)))
+}
+
+/**
  * Busca una prenda o caja por su tag NFC
  */
 export async function findEntityByNFCTag(tagId: string): Promise<NFCTagInfo | null> {
   try {
+    const candidatos = variantesDeTag(tagId)
+    if (candidatos.length === 0) return null
+
     // Buscar en prendas
-    const { data: garment, error: garmentError } = await supabase
+    const { data: garments, error: garmentError } = await supabase
       .from('garments')
       .select(`
         id,
@@ -28,12 +51,14 @@ export async function findEntityByNFCTag(tagId: string): Promise<NFCTagInfo | nu
           name
         )
       `)
-      .eq('nfc_tag_id', tagId)
-      .single()
+      .in('nfc_tag_id', candidatos)
+      .limit(1)
+
+    const garment = garments?.[0]
 
     if (garment && !garmentError) {
       return {
-        tagId,
+        tagId: garment.nfc_tag_id || tagId,
         entityType: 'garment',
         entityId: garment.id,
         entityName: garment.name,
@@ -42,15 +67,17 @@ export async function findEntityByNFCTag(tagId: string): Promise<NFCTagInfo | nu
     }
 
     // Buscar en cajas
-    const { data: box, error: boxError } = await supabase
+    const { data: boxes, error: boxError } = await supabase
       .from('boxes')
       .select('id, name, nfc_tag_id')
-      .eq('nfc_tag_id', tagId)
-      .single()
+      .in('nfc_tag_id', candidatos)
+      .limit(1)
+
+    const box = boxes?.[0]
 
     if (box && !boxError) {
       return {
-        tagId,
+        tagId: box.nfc_tag_id || tagId,
         entityType: 'box',
         entityId: box.id,
         entityName: box.name,
@@ -91,7 +118,7 @@ export async function registerNFCTag(
     const { error } = await supabase
       .from('nfc_tags')
       .insert({
-        tag_id: tagId,
+        tag_id: normalizeNFCTag(tagId),
         entity_type: entityType,
         entity_id: entityId,
         created_by: createdBy
@@ -126,7 +153,7 @@ export async function updateEntityNFCTag(
     const { data: updated, error: updateError } = await supabase
       .from(table)
       .update({
-        nfc_tag_id: newTagId,
+        nfc_tag_id: newTagId ? normalizeNFCTag(newTagId) : null,
         updated_at: new Date().toISOString()
       })
       .eq('id', entityId)

@@ -16,6 +16,7 @@ import { toast } from '@/hooks/use-toast'
 import type { Box } from '@/types'
 import { DEFAULT_BOX_CAPACITY, getBoxMaxCapacity, countBoxGarments } from '@/utils/box-capacity'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { normalizeNFCTag } from '@/utils/nfc'
 
 export default function AdminBoxesPage() {
   const { confirmar, dialogoDeConfirmacion } = useConfirm()
@@ -250,9 +251,12 @@ export default function AdminBoxesPage() {
   }
 
   const handleNFCRead = async (tagId: string) => {
+    // Guardar y comparar siempre el código normalizado, como el alta de prendas
+    const normalizedTagId = normalizeNFCTag(tagId)
+
     // En modo demo, simplemente asignar el tag
     if (!isSupabaseConfigured) {
-      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+      setFormData(prev => ({ ...prev, nfcTagId: normalizedTagId }))
       return
     }
 
@@ -261,7 +265,7 @@ export default function AdminBoxesPage() {
       const { data: existingBox } = await supabase
         .from('boxes')
         .select('id, name')
-        .eq('nfc_tag_id', tagId)
+        .eq('nfc_tag_id', normalizedTagId)
         .neq('id', editingBox?.id || '') // Excluir la caja actual si estamos editando
         .single()
 
@@ -274,7 +278,7 @@ export default function AdminBoxesPage() {
       const { data: existingGarment } = await supabase
         .from('garments')
         .select('id, name')
-        .eq('nfc_tag_id', tagId)
+        .eq('nfc_tag_id', normalizedTagId)
         .single()
 
       if (existingGarment) {
@@ -283,10 +287,10 @@ export default function AdminBoxesPage() {
       }
 
       // Si no hay conflictos, asignar el tag
-      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+      setFormData(prev => ({ ...prev, nfcTagId: normalizedTagId }))
     } catch (error) {
       // Si no encuentra registros (que es lo esperado), continuar
-      setFormData(prev => ({ ...prev, nfcTagId: tagId }))
+      setFormData(prev => ({ ...prev, nfcTagId: normalizedTagId }))
     }
   }
 
