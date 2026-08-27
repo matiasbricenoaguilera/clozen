@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { ProgressBar } from '@/components/ui/progress-bar'
-import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home, Menu, X, Tag, HelpCircle } from 'lucide-react'
+import { Shirt, Sun, Moon, LogOut, Settings, Package, Sparkles, List, Home, Menu, X, Tag, HelpCircle, Search } from 'lucide-react'
 
 export function Navbar() {
   const { theme, setTheme } = useTheme()
@@ -76,6 +76,12 @@ export function Navbar() {
               {/* Barra de administración - solo visible para admins */}
               {userProfile.role === 'admin' && (
                 <>
+                  <Link href="/admin/garments">
+                    <Button variant="outline" size="sm" className="hidden xl:flex">
+                      <Search className="h-4 w-4 mr-2" />
+                      Inventario
+                    </Button>
+                  </Link>
                   <Link href="/admin/organize">
                     <Button variant="outline" size="sm" className="hidden xl:flex">
                       <Package className="h-4 w-4 mr-2" />
@@ -196,6 +202,12 @@ export function Navbar() {
 
                 {userProfile.role === 'admin' && (
                   <>
+                    <Link href="/admin/garments" onClick={() => setMobileMenuOpen(false)}>
+                      <Button variant="outline" className="w-full justify-start">
+                        <Search className="h-4 w-4 mr-2" />
+                        Inventario
+                      </Button>
+                    </Link>
                     <Link href="/admin/organize" onClick={() => setMobileMenuOpen(false)}>
                       <Button variant="outline" className="w-full justify-start">
                         <Package className="h-4 w-4 mr-2" />

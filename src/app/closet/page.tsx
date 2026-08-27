@@ -54,6 +54,9 @@ const EditGarmentModal = dynamic(() => import('@/components/garments/edit-garmen
   ssr: false
 })
 
+/** Prendas que trae la vista de closet. El listado completo vive en /admin/garments */
+const LIMITE_DE_PRENDAS = 50
+
 export default function ClosetPage() {
   const { userProfile, loading: authLoading } = useAuth()
   const [garments, setGarments] = useState<Garment[]>([])
@@ -63,6 +66,8 @@ export default function ClosetPage() {
   const [loadingGarments, setLoadingGarments] = useState(false)
   const [loadingBoxes, setLoadingBoxes] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  /** Prendas disponibles que existen en total, para avisar de que la vista está recortada */
+  const [totalDisponibles, setTotalDisponibles] = useState<number | null>(null)
   const [selectedGarmentType, setSelectedGarmentType] = useState<string>('')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
   const [users, setUsers] = useState<{ id: string; email: string; full_name?: string }[]>([])
@@ -133,7 +138,7 @@ export default function ClosetPage() {
         `)
         .eq('status', 'available') // Solo mostrar prendas disponibles
         .order('last_used', { ascending: true, nullsFirst: false }) // Priorizar prendas menos usadas
-        .limit(50) // Límite optimizado para mejor rendimiento
+        .limit(LIMITE_DE_PRENDAS) // La vista es un resumen; el inventario completo está en /admin/garments
 
       // Si no es admin, filtrar por su user_id
       if (!isAdmin) {
@@ -143,9 +148,23 @@ export default function ClosetPage() {
       const { data, error } = await query
 
       if (error) throw error
+
+      // Cuántas hay en realidad: la lista viene limitada a 50 (LIMITE_DE_PRENDAS)
+      let conteo = supabase
+        .from('garments')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'available')
+
+      if (!isAdmin) {
+        conteo = conteo.eq('user_id', userProfile?.id)
+      }
+
+      const { count } = await conteo
+
       // Usar startTransition para actualizaciones no urgentes
       startTransition(() => {
         setGarments(data || [])
+        setTotalDisponibles(count ?? null)
       })
     } catch (error) {
       console.error('Error fetching garments:', error)
@@ -1057,6 +1076,19 @@ export default function ClosetPage() {
           <div className="flex flex-wrap gap-2 sm:gap-4 mt-2">
             <div className="text-xs sm:text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{filteredGarments.length}</span> prendas disponibles
+              {totalDisponibles !== null && totalDisponibles > garments.length && (
+                <>
+                  {' '}de {totalDisponibles}
+                  {userProfile?.role === 'admin' && (
+                    <>
+                      {' · '}
+                      <Link href="/admin/garments" className="underline hover:text-foreground">
+                        ver el inventario completo
+                      </Link>
+                    </>
+                  )}
+                </>
+              )}
             </div>
             <div className="text-xs sm:text-sm text-muted-foreground">
               <span className="font-medium text-foreground">{forgottenGarments.length}</span> prendas olvidadas

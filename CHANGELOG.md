@@ -77,6 +77,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
 ### Added
+- **Nueva pantalla `/admin/garments` — Inventario**: la vista completa de las prendas del sistema, que hasta ahora no existía en ninguna parte
+  - Búsqueda **en el servidor** por nombre, tipo y color (aproximada) y por código NFC o de barras (exacta, tecleada: antes los códigos solo se podían buscar escaneando). Con 350 ms de espera para no lanzar una consulta por tecla
+  - Filtros por estado (disponible / en uso), caja —incluida la opción **Sin caja**, que son justo las que hay que organizar— y tipo de prenda
+  - Paginación real con `range()` y conteo exacto, en lugar de un límite mudo
+  - Cabecera con el resumen del sistema: prendas totales, disponibles, en uso y sin caja
+  - Acciones sobre cada prenda sin salir de la lista: editar, cambiar de caja, retirar y restaurar, reutilizando los verbos de `lib/garments-repo.ts`
+  - Enlace **Inventario** en el menú de administración, en escritorio y en móvil
 - **Girar la foto de una prenda**: dos botones (↺ / ↻) junto a la vista previa, en el modal **Editar Prenda** y en el formulario de alta
   - El giro se ve al instante en la vista previa y se graba al guardar, así que girar tres veces sigue siendo una sola subida
   - Al editar, la imagen se descarga con `supabase.storage.download()` —no con `fetch` de la URL pública, para no depender de CORS ni acabar con un canvas *tainted*—, se gira, se sube con nombre nuevo y se borra la anterior
@@ -91,6 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - El script incluye una consulta que saca a la luz las cajas que ya estuvieran por encima de su límite
 
 ### Changed
+- **`/closet` ya no finge que muestra todo el armario**: la vista trae 50 prendas y la búsqueda filtra solo sobre esas, así que una prenda que no estuviera entre las 50 parecía no existir. Ahora la cabecera dice "24 prendas disponibles **de 137**" y, si eres admin, enlaza al inventario completo
 - **`compressImage()` deja de estar duplicado** en el alta y en el modal de edición (con criterios distintos: 800px frente a 1200px) y pasa a `lib/image-format.ts` con el tamaño como parámetro; cada pantalla conserva el suyo
 - **Las reglas de retirar, ingresar y mover viven en `lib/garments-repo.ts`**, no repartidas por las pantallas: `retirarPrendas()`, `asignarPrendasACaja()` y `quitarPrendasDeCaja()`
   - `retirarPrendas()` comprueba el permiso (un admin puede retirar prendas de cualquiera), suma el uso, suelta la caja y registra el historial **a nombre del dueño de la prenda**, no del admin. Antes cada una de las tres pantallas que retiraban hacía una parte distinta
