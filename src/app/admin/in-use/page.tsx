@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Shirt, RefreshCw, Calendar, User, Copy, Check, RotateCcw, Package, AlertCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { updateGarment } from '@/lib/garments-repo'
+import { quitarPrendasDeCaja } from '@/lib/garments-repo'
 import { toast } from '@/hooks/use-toast'
 
 interface InUseGarment {
@@ -145,11 +145,8 @@ export default function AdminInUsePage() {
 
       if (fetchError) throw fetchError
 
-      // Restaurar la prenda (cambiar status a 'available' y quitar caja asignada)
-      await updateGarment(garmentId, {
-        status: 'available',
-        box_id: null // Quitar caja asignada al restaurar
-      })
+      // Restaurar la prenda: vuelve a estar disponible y sin caja asignada
+      await quitarPrendasDeCaja([garmentId])
 
       // Mostrar información - siempre sin caja después de restaurar
       setRestoredGarmentInfo({

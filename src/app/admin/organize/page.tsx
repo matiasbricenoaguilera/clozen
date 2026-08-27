@@ -29,7 +29,7 @@ import {
   assertBoxHasSpace,
   BoxCapacityError
 } from '@/utils/box-capacity'
-import { updateGarment, updateGarments } from '@/lib/garments-repo'
+import { asignarPrendasACaja, quitarPrendasDeCaja } from '@/lib/garments-repo'
 
 export default function AdminOrganizePage() {
   const { userProfile } = useAuth()
@@ -395,11 +395,8 @@ export default function AdminOrganizePage() {
       const garmentIds = foundGarmentsBatch.map(g => g.id)
       const inUseGarments = foundGarmentsBatch.filter(g => g.status === 'in_use')
 
-      // Actualizar todas las prendas
-      await updateGarments(garmentIds, {
-        box_id: targetBoxId,
-        status: 'available'
-      })
+      // Asigna la caja y restaura las que estaban en uso
+      await asignarPrendasACaja(garmentIds, targetBoxId)
 
       const targetBox = boxes.find(b => b.id === targetBoxId)
       const boxName = targetBox?.name || 'caja desconocida'
@@ -613,7 +610,11 @@ export default function AdminOrganizePage() {
         }
       }
 
-      await updateGarment(garmentId, { box_id: targetBoxId })
+      if (targetBoxId) {
+        await asignarPrendasACaja([garmentId], targetBoxId)
+      } else {
+        await quitarPrendasDeCaja([garmentId])
+      }
 
       setSuccess(`✅ Prenda ${targetBoxId ? 'movida' : 'removida'} exitosamente`)
       
@@ -665,10 +666,7 @@ export default function AdminOrganizePage() {
         }
       }
 
-      await updateGarment(garmentId, {
-        box_id: targetBoxId,
-        status: 'available'
-      })
+      await asignarPrendasACaja([garmentId], targetBoxId)
 
       const boxName = targetBox?.name || 'caja'
       setSuccess(`✅ Prenda organizada en "${boxName}"`)

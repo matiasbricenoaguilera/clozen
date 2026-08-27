@@ -24,7 +24,7 @@ import {
   assertBoxHasSpace,
   BoxCapacityError
 } from '@/utils/box-capacity'
-import { updateGarment, updateGarments } from '@/lib/garments-repo'
+import { retirarPrendas, asignarPrendasACaja } from '@/lib/garments-repo'
 import { toast } from '@/hooks/use-toast'
 import type { Garment, Box, WeatherData } from '@/types'
 
@@ -350,51 +350,11 @@ export default function ClosetPage() {
     if (!userProfile) return
 
     try {
-      const updates = garmentIds.map(async (garmentId) => {
-        const garment = selectedGarments.find(g => g.id === garmentId)
-        if (!garment) return
-
-        const isAdmin = userProfile.role === 'admin'
-        
-        // Verificar permisos
-        if (!isAdmin && garment.user_id !== userProfile.id) {
-          console.error('❌ No tienes permiso para retirar esta prenda')
-          return
-        }
-
-        // Obtener usage_count actual
-        const { data: currentGarment, error: fetchError } = await supabase
-          .from('garments')
-          .select('usage_count, user_id')
-          .eq('id', garmentId)
-          .single()
-
-        if (fetchError) throw fetchError
-
-        const newUsageCount = (currentGarment?.usage_count || 0) + 1
-        const garmentOwnerId = currentGarment?.user_id || userProfile.id
-
-        // Actualizar prenda
-        await updateGarment(garmentId, {
-          status: 'in_use',
-          last_used: new Date().toISOString(),
-          usage_count: newUsageCount,
-          box_id: null // Al retirar, la prenda deja de ocupar sitio en la caja
-        })
-
-        // Registrar en historial
-        await supabase
-          .from('usage_history')
-          .insert({
-            user_id: garmentOwnerId,
-            garment_id: garmentId,
-            usage_type: 'manual',
-            created_at: new Date().toISOString()
-          })
+      await retirarPrendas(garmentIds, {
+        actorId: userProfile.id,
+        esAdmin: userProfile.role === 'admin'
       })
 
-      await Promise.all(updates)
-      
       // Limpiar selección y recargar datos
       setSelectedGarments([])
       setShowSearchList(false)
@@ -442,44 +402,12 @@ export default function ClosetPage() {
     }
 
     try {
-      const isAdmin = userProfile.role === 'admin'
-      
-      // 1. Obtener el valor actual de usage_count y user_id de la prenda
-      const { data: currentGarment, error: fetchError } = await supabase
-        .from('garments')
-        .select('usage_count, user_id, name')
-        .eq('id', garmentId)
-        .single()
-
-      if (fetchError) throw fetchError
-
-      // Si no es admin, verificar que la prenda pertenezca al usuario
-      if (!isAdmin && currentGarment?.user_id !== userProfile.id) {
-        throw new Error('No tienes permiso para retirar esta prenda')
-      }
-
-      // 2. Incrementar y actualizar
-      const newUsageCount = (currentGarment?.usage_count || 0) + 1
-      const garmentOwnerId = currentGarment?.user_id || userProfile.id
-
-      await updateGarment(garmentId, {
-        status: 'in_use',
-        last_used: new Date().toISOString(),
-        usage_count: newUsageCount,
-        box_id: null // Remover de la caja al retirar
+      await retirarPrendas([garmentId], {
+        actorId: userProfile.id,
+        esAdmin: userProfile.role === 'admin'
       })
 
-      // 3. Registrar en historial de uso (usar el dueño de la prenda, no el admin)
-      await supabase
-        .from('usage_history')
-        .insert({
-          user_id: garmentOwnerId,
-          garment_id: garmentId,
-          usage_type: 'manual',
-          created_at: new Date().toISOString()
-        })
-
-      // 4. Refrescar datos para actualizar la vista
+      // Refrescar datos para actualizar la vista
       await Promise.all([
         fetchGarments(),
         fetchForgottenGarments() // Actualizar lista de prendas olvidadas
@@ -672,17 +600,13 @@ export default function ClosetPage() {
     setNfcError('')
 
     try {
-      // Verificar capacidad con un conteo fresco
+      // La capacidad la revalida el repositorio con un conteo fresco; aquí solo
+      // adelantamos el aviso con la caja alternativa recomendada
       const currentBoxCount = await countBoxOccupancy(selectedBoxForIngress)
       const targetBox = boxes.find(b => b.id === selectedBoxForIngress)
-
       assertBoxHasSpace({ ...targetBox, garment_count: currentBoxCount }, 1, boxes)
 
-      // Actualizar prenda: asignar cajón y cambiar status a available
-      await updateGarment(scannedGarmentForIngress.id, {
-        box_id: selectedBoxForIngress,
-        status: 'available'
-      })
+      await asignarPrendasACaja([scannedGarmentForIngress.id], selectedBoxForIngress)
 
       // Refrescar datos
       await fetchGarments()
@@ -947,12 +871,9 @@ export default function ClosetPage() {
       const garmentIds = foundGarmentsBatch.map(g => g.id)
       const inUseGarments = foundGarmentsBatch.filter(g => g.status === 'in_use')
       
-      // Actualizar todas las prendas: asignar caja y restaurar las que están en uso
+      // Asigna la caja y restaura las que estaban en uso.
       // IMPORTANTE: No modificar nfc_tag_id ni barcode_id, solo box_id y status
-      await updateGarments(garmentIds, {
-        box_id: targetBoxId,
-        status: 'available' // Restaurar todas las prendas a 'available'
-      })
+      await asignarPrendasACaja(garmentIds, targetBoxId)
 
       // Verificar que los códigos no se perdieron
       const { data: updatedGarments } = await supabase

@@ -72,6 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
 ### Changed
+- **Las reglas de retirar, ingresar y mover viven en `lib/garments-repo.ts`**, no repartidas por las pantallas: `retirarPrendas()`, `asignarPrendasACaja()` y `quitarPrendasDeCaja()`
+  - `retirarPrendas()` comprueba el permiso (un admin puede retirar prendas de cualquiera), suma el uso, suelta la caja y registra el historial **a nombre del dueño de la prenda**, no del admin. Antes cada una de las tres pantallas que retiraban hacía una parte distinta
+  - `asignarPrendasACaja()` revalida la capacidad con un conteo fresco antes de escribir, y no cuenta como huecos nuevos las prendas que ya estaban en esa caja
+  - Los `insert` en `usage_history` dejan de ignorar su error: si falla, queda registrado en consola en vez de perderse
+  - Las pantallas (`/closet`, `/closet/recommendations`, `/admin/organize`, `/admin/in-use`) se quedan solo con la UI
+- **El cliente dummy del modo demo es ahora un constructor de queries encadenable**: cualquier combinación de PostgREST funciona sin tener que añadirla a mano. Antes, cada cadena nueva que no estuviera prevista rompía el modo demo con `is not a function`
 - **Eliminados los tres `confirm()` nativos que quedaban** (eliminar prenda, eliminar caja, liberar tag NFC): bloquean el hilo del navegador y con él los escáneres NFC y de cámara, que dejan de recibir eventos hasta que alguien pulsa el botón
   - Nuevo `useConfirm()` en `components/ui/confirm-dialog.tsx`: diálogo de la propia app que devuelve una promesa, con botón destructivo en rojo y texto que dice lo que va a pasar ("Eliminar prenda", "Liberar tag")
 - **Toda la lógica de capacidad vive en `utils/box-capacity.ts`**: `countBoxOccupancy()`, `countBoxesOccupancy()`, `withOccupancy()`, `findMostEmptyBox()`, `assertBoxHasSpace()` y `BoxCapacityError`, además de las que ya estaban

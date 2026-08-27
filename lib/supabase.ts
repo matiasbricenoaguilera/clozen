@@ -21,6 +21,36 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   }
 }
 
+// Respuesta única del modo demo
+const RESPUESTA_DEMO = { data: null, error: { message: 'Supabase no configurado' }, count: null }
+
+/**
+ * Constructor de queries de mentira para el modo demo.
+ *
+ * Devuelve siempre el mismo objeto, así que **cualquier** cadena de PostgREST
+ * funciona: `.select().eq().single()`, `.update().in().select()`,
+ * `.delete().eq().select()`... Antes cada cadena nueva había que añadirla a
+ * mano aquí, y la que faltaba reventaba el modo demo con `is not a function`.
+ *
+ * Es "thenable": un `await` sobre él resuelve la respuesta de demo, se haya
+ * llamado a `.single()` o no.
+ */
+function crearQueryDemo(): any {
+  const query: any = new Proxy(
+    {
+      then: (resolve: (valor: typeof RESPUESTA_DEMO) => void) => resolve(RESPUESTA_DEMO)
+    },
+    {
+      get(target, prop) {
+        if (prop in target) return (target as any)[prop]
+        // Cualquier otro método del constructor de queries devuelve la cadena
+        return () => query
+      }
+    }
+  )
+  return query
+}
+
 // Si no hay credenciales, crear un cliente dummy que no haga requests reales
 export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith('http')
   ? createClient(supabaseUrl, supabaseAnonKey, {
@@ -39,36 +69,7 @@ export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith
         signOut: () => Promise.resolve({ error: null }),
         onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } })
       },
-      from: () => ({
-        select: () => ({
-          eq: () => ({
-            single: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
-          })
-        }),
-        insert: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
-        update: () => ({
-          eq: () => ({
-            select: () => Object.assign(
-              Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
-              { single: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }) }
-            )
-          }),
-          // `updateGarments` (lib/garments-repo.ts) encadena .in(...).select('id')
-          in: () => ({
-            select: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
-          })
-        }),
-        delete: () => ({
-          eq: () => Object.assign(
-            Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
-            {
-              // `deleteGarment` encadena .eq(...).select('id'); otros flujos encadenan dos .eq()
-              select: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
-              eq: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
-            }
-          )
-        })
-      }),
+      from: () => crearQueryDemo(),
       storage: {
         from: () => ({
           upload: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),

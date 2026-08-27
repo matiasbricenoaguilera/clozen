@@ -13,7 +13,7 @@ import { getWeatherByCity } from '@/utils/weather'
 import { WeatherData, Garment, Box } from '@/types'
 import { Shirt, Sparkles, Cloud, Package, Hand, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { updateGarment } from '@/lib/garments-repo'
+import { retirarPrendas } from '@/lib/garments-repo'
 import { toast } from '@/hooks/use-toast'
 
 // Lazy load componentes pesados
@@ -148,38 +148,17 @@ export default function RecommendationsPage() {
     try {
       setLoadingRecommendations(true)
 
-      const updates = selectedOutfit.map(async (garment) => {
-        // 1. Obtener el valor actual de usage_count
-        const { data: currentGarment, error: fetchError } = await supabase
-          .from('garments')
-          .select('usage_count')
-          .eq('id', garment.id)
-          .single()
+      // Usar un outfit es retirar sus prendas: se marcan en uso, suman un uso,
+      // sueltan la caja y quedan registradas en el historial
+      await retirarPrendas(
+        selectedOutfit.map(garment => garment.id),
+        {
+          actorId: userProfile.id,
+          esAdmin: userProfile.role === 'admin',
+          tipoDeUso: 'recommendation'
+        }
+      )
 
-        if (fetchError) throw fetchError
-
-        // 2. Incrementar y actualizar
-        const newUsageCount = (currentGarment?.usage_count || 0) + 1
-
-        await updateGarment(garment.id, {
-          status: 'in_use',
-          last_used: new Date().toISOString(),
-          usage_count: newUsageCount,
-          box_id: null // Al usar la prenda, deja de ocupar sitio en la caja
-        })
-
-        // 3. Registrar en historial de uso
-        await supabase
-          .from('usage_history')
-          .insert({
-            user_id: garment.user_id,
-            garment_id: garment.id,
-            usage_type: 'recommendation',
-            created_at: new Date().toISOString()
-          })
-      })
-
-      await Promise.all(updates)
       await loadData()
       setRecommendations([])
       setShowLocationModal(false)
