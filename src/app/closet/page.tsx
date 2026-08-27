@@ -15,7 +15,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Plus, Search, Shirt, Package, Filter, Smartphone, Scan, Hand, Sparkles, CheckCircle, AlertCircle, LogOut, LogIn } from 'lucide-react'
 import { findEntityByNFCTag } from '@/utils/nfc'
-import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
+import {
+  getBoxMaxCapacity,
+  getBoxAvailableSpace,
+  findMostEmptyBox,
+  withOccupancy,
+  countBoxOccupancy,
+  assertBoxHasSpace,
+  BoxCapacityError
+} from '@/utils/box-capacity'
 import { updateGarment, updateGarments } from '@/lib/garments-repo'
 import { toast } from '@/hooks/use-toast'
 import type { Garment, Box, WeatherData } from '@/types'
@@ -169,12 +177,8 @@ export default function ClosetPage() {
 
       if (error) throw error
 
-      // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
-      // en lugar de traer TODOS los box_id (puede ser miles de registros)
-      const boxIds = (data || []).map((box: { id: string; name: string; max_capacity?: number }) => box.id)
-      
       // Si no hay cajas, retornar vacío
-      if (boxIds.length === 0) {
+      if (!data || data.length === 0) {
         startTransition(() => {
           setBoxes([])
           setBoxesMap(new Map())
@@ -183,31 +187,8 @@ export default function ClosetPage() {
         return
       }
 
-      // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
-      // Esto es MUCHO más eficiente que traer todos los registros
-      const countQueries = boxIds.map((boxId: string) =>
-        supabase
-          .from('garments')
-          .select('*', { count: 'exact', head: true })
-          .eq('box_id', boxId)
-          .eq('status', 'available')
-      )
-
-      const countResults = await Promise.all(countQueries)
-
-      // Crear mapa de conteos
-      const countMap = new Map<string, number>()
-      boxIds.forEach((boxId: string, index: number) => {
-        countMap.set(boxId, countResults[index].count || 0)
-      })
-
-      // Combinar datos con conteos
-      const boxesWithCount = (data || []).map((box: any) => ({
-        ...box,
-        garment_count: countMap.get(box.id) || 0
-      }))
-
-      const boxesData: Box[] = boxesWithCount
+      // Conteo de ocupación en paralelo (queries count(*), sin traer filas)
+      const boxesData: Box[] = await withOccupancy<Box>(data)
       
       // Crear mapa para acceso O(1) a nombres de cajas
       const boxesMapData = new Map<string, string>()
@@ -397,7 +378,8 @@ export default function ClosetPage() {
         await updateGarment(garmentId, {
           status: 'in_use',
           last_used: new Date().toISOString(),
-          usage_count: newUsageCount
+          usage_count: newUsageCount,
+          box_id: null // Al retirar, la prenda deja de ocupar sitio en la caja
         })
 
         // Registrar en historial
@@ -653,20 +635,11 @@ export default function ClosetPage() {
       // ✅ VALIDACIÓN DE CAPACIDAD MÁXIMA
       const maxCapacity = getBoxMaxCapacity(box)
       const currentCount = box.garment_count || 0
-      const isFull = currentCount >= maxCapacity
-      
-      if (isFull) {
-        // Buscar una caja alternativa disponible
-        const availableBoxes = boxes
-          .filter(b => !isBoxFull(b))
-          .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
-        
-        if (availableBoxes.length > 0) {
-          const mostEmptyBox = availableBoxes[0]
-          setNfcError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
-        } else {
-          setNfcError(`❌ La caja "${box.name}" está llena (${currentCount}/${maxCapacity} prendas) y no hay otras cajas disponibles.`)
-        }
+
+      try {
+        assertBoxHasSpace(box, 1, boxes)
+      } catch (error) {
+        setNfcError(error instanceof Error ? `❌ ${error.message}` : '❌ Esta caja no tiene espacio.')
         setScanningBoxNFCForIngress(false)
         return
       }
@@ -699,22 +672,11 @@ export default function ClosetPage() {
     setNfcError('')
 
     try {
-      // Verificar capacidad de la caja
-      const { count: currentCount } = await supabase
-        .from('garments')
-        .select('*', { count: 'exact', head: true })
-        .eq('box_id', selectedBoxForIngress)
-        .eq('status', 'available')
-
+      // Verificar capacidad con un conteo fresco
+      const currentBoxCount = await countBoxOccupancy(selectedBoxForIngress)
       const targetBox = boxes.find(b => b.id === selectedBoxForIngress)
-      const maxCapacity = getBoxMaxCapacity(targetBox)
-      const currentBoxCount = currentCount || 0
 
-      if (currentBoxCount >= maxCapacity) {
-        setNfcError(`Esta caja está llena (máximo ${maxCapacity} prendas)`)
-        setIngressingGarment(false)
-        return
-      }
+      assertBoxHasSpace({ ...targetBox, garment_count: currentBoxCount }, 1, boxes)
 
       // Actualizar prenda: asignar cajón y cambiar status a available
       await updateGarment(scannedGarmentForIngress.id, {
@@ -931,34 +893,17 @@ export default function ClosetPage() {
     }
   }
 
-  // Función para encontrar la caja más vacía disponible
-  const findMostEmptyBox = async (): Promise<Box | null> => {
+  /**
+   * Caja con más sitio libre, sobre conteos recién leídos de la base.
+   * `excluir` deja fuera la caja que el usuario ya descartó.
+   */
+  const buscarCajaConMasSitio = async (necesarias = 1, excluir?: string): Promise<Box | null> => {
     if (!boxes || boxes.length === 0) return null
-    
-    // Obtener conteos actualizados de todas las cajas
-    const boxesWithCount = await Promise.all(
-      boxes.map(async (box) => {
-        const { count, error: countError } = await supabase
-          .from('garments')
-          .select('*', { count: 'exact', head: true })
-          .eq('box_id', box.id)
-          .eq('status', 'available')
-        
-        if (countError) {
-          console.error('Error counting garments for box:', box.id, countError)
-          return { ...box, garment_count: 0 }
-        }
-        
-        return { ...box, garment_count: count || 0 }
-      })
-    )
-    
-    // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
-    const availableBoxes = boxesWithCount
-      .filter(box => !isBoxFull(box))
-      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
-    
-    return availableBoxes.length > 0 ? availableBoxes[0] : null
+
+    const candidatas = excluir ? boxes.filter(box => box.id !== excluir) : boxes
+    const conCuentaFresca = await withOccupancy<Box>(candidatas)
+
+    return findMostEmptyBox(conCuentaFresca, necesarias)
   }
 
   // Función para asignar caja a todo el lote (y restaurar prendas en uso)
@@ -972,55 +917,31 @@ export default function ClosetPage() {
     setNfcError('')
 
     try {
-      // Obtener conteo actualizado de prendas disponibles en la caja seleccionada
-      const { count: currentCount } = await supabase
-        .from('garments')
-        .select('*', { count: 'exact', head: true })
-        .eq('box_id', selectedBoxForBatch)
-        .eq('status', 'available')
-
-      const currentBoxCount = currentCount || 0
       // Contar todas las prendas que se van a asignar (incluyendo las que están en uso)
       const garmentsToAssign = foundGarmentsBatch.length
-      const newCount = currentBoxCount + garmentsToAssign
-      const selectedBoxCapacity = getBoxMaxCapacity(boxes.find(b => b.id === selectedBoxForBatch))
+
+      // Conteo fresco de la caja elegida: el del estado puede llevar minutos sin refrescar
+      const currentBoxCount = await countBoxOccupancy(selectedBoxForBatch)
+      const selectedBox = boxes.find(b => b.id === selectedBoxForBatch)
+      const selectedBoxConCuenta = selectedBox
+        ? { ...selectedBox, garment_count: currentBoxCount }
+        : undefined
 
       // Determinar la caja a usar
       let targetBoxId = selectedBoxForBatch
       let boxChanged = false
 
-      // Si la caja seleccionada está llena o se llenará, buscar la más vacía
-      if (newCount > selectedBoxCapacity) {
-        console.log(`⚠️ Caja seleccionada se llenará (${newCount} > ${selectedBoxCapacity}), buscando caja más vacía...`)
-        const mostEmptyBox = await findMostEmptyBox()
-        
-        if (mostEmptyBox) {
-          // Verificar que la caja más vacía tenga espacio
-          const { count: emptyBoxCount } = await supabase
-            .from('garments')
-            .select('*', { count: 'exact', head: true })
-            .eq('box_id', mostEmptyBox.id)
-            .eq('status', 'available')
-          
-          const emptyBoxCurrentCount = emptyBoxCount || 0
-          const emptyBoxNewCount = emptyBoxCurrentCount + garmentsToAssign
-          const emptyBoxCapacity = getBoxMaxCapacity(mostEmptyBox)
-          
-          if (emptyBoxNewCount <= emptyBoxCapacity) {
-            targetBoxId = mostEmptyBox.id
-            boxChanged = true
-            console.log(`✅ Cambiando a caja más vacía: "${mostEmptyBox.name}" (${emptyBoxCurrentCount} prendas)`)
-          } else {
-            // Si incluso la más vacía se llenaría, dividir entre múltiples cajas o mostrar error
-            setNfcError(`❌ No hay cajas con suficiente espacio. Se necesitan ${garmentsToAssign} espacios pero la caja más vacía solo tiene ${Math.max(0, emptyBoxCapacity - emptyBoxCurrentCount)} espacios disponibles.`)
-            setAssigningBox(false)
-            return
-          }
-        } else {
-          setNfcError('❌ No hay cajas disponibles con espacio suficiente.')
-          setAssigningBox(false)
+      // Si no caben todas, cambiar a la caja con más sitio libre (nunca a una llena)
+      if (getBoxAvailableSpace(selectedBoxConCuenta) < garmentsToAssign) {
+        const mostEmptyBox = await buscarCajaConMasSitio(garmentsToAssign, selectedBoxForBatch)
+
+        if (!mostEmptyBox) {
+          assertBoxHasSpace(selectedBoxConCuenta, garmentsToAssign, boxes)
           return
         }
+
+        targetBoxId = mostEmptyBox.id
+        boxChanged = true
       }
 
       const garmentIds = foundGarmentsBatch.map(g => g.id)
@@ -1087,7 +1008,11 @@ export default function ClosetPage() {
       setNfcError(`✅ ${foundGarmentsBatch.length} prenda(s) asignada(s) a la caja "${boxName}"${boxLocation ? ` (📍 ${boxLocation})` : ''}${inUseGarments.length > 0 ? `. ${inUseGarments.length} restaurada(s).` : ''}`)
     } catch (error) {
       console.error('Error assigning box to batch:', error)
-      setNfcError(`Error al asignar la caja: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+      setNfcError(
+        error instanceof BoxCapacityError
+          ? `❌ ${error.message}`
+          : `Error al asignar la caja: ${error instanceof Error ? error.message : 'Error desconocido'}`
+      )
     } finally {
       setAssigningBox(false)
     }
@@ -1737,17 +1662,11 @@ export default function ClosetPage() {
                           
                           if (value && value !== 'none') {
                             // Verificar capacidad de la caja seleccionada
-                            const { count } = await supabase
-                              .from('garments')
-                              .select('*', { count: 'exact', head: true })
-                              .eq('box_id', value)
-                              .eq('status', 'available')
-                            
-                            const currentCount = count || 0
+                            const currentCount = await countBoxOccupancy(value)
                             const garmentsToAssign = foundGarmentsBatch.length
                             const box = boxes.find(b => b.id === value)
                             const maxCapacity = getBoxMaxCapacity(box)
-                            const availableSpace = Math.max(0, maxCapacity - currentCount)
+                            const availableSpace = getBoxAvailableSpace({ ...box, garment_count: currentCount })
                             const willFit = garmentsToAssign <= availableSpace
                             
                             setSelectedBoxInfo(box ? {
@@ -1759,31 +1678,20 @@ export default function ClosetPage() {
                             } : null)
                             setHasEnoughSpace(willFit)
                             
-                            // Si no cabe, buscar la caja más vacía automáticamente
+                            // Si no cabe, buscar la caja con más sitio automáticamente
                             if (!willFit) {
-                              const mostEmptyBox = await findMostEmptyBox()
+                              const mostEmptyBox = await buscarCajaConMasSitio(garmentsToAssign, value)
                               if (mostEmptyBox) {
-                                const { count: emptyCount } = await supabase
-                                  .from('garments')
-                                  .select('*', { count: 'exact', head: true })
-                                  .eq('box_id', mostEmptyBox.id)
-                                  .eq('status', 'available')
-                                
-                                const emptyCurrentCount = emptyCount || 0
-                                const emptyMaxCapacity = getBoxMaxCapacity(mostEmptyBox)
-                                const emptyAvailableSpace = Math.max(0, emptyMaxCapacity - emptyCurrentCount)
-                                
-                                if (garmentsToAssign <= emptyAvailableSpace) {
-                                  setSelectedBoxForBatch(mostEmptyBox.id)
-                                  setSelectedBoxInfo({
-                                    name: mostEmptyBox.name,
-                                    location: (mostEmptyBox as any).location,
-                                    currentCount: emptyCurrentCount,
-                                    availableSpace: emptyAvailableSpace,
-                                    maxCapacity: emptyMaxCapacity
-                                  })
-                                  setHasEnoughSpace(true)
-                                }
+                                const emptyCurrentCount = mostEmptyBox.garment_count || 0
+                                setSelectedBoxForBatch(mostEmptyBox.id)
+                                setSelectedBoxInfo({
+                                  name: mostEmptyBox.name,
+                                  location: (mostEmptyBox as any).location,
+                                  currentCount: emptyCurrentCount,
+                                  availableSpace: getBoxAvailableSpace(mostEmptyBox),
+                                  maxCapacity: getBoxMaxCapacity(mostEmptyBox)
+                                })
+                                setHasEnoughSpace(true)
                               }
                             }
                           } else {

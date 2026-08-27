@@ -164,7 +164,8 @@ export default function RecommendationsPage() {
         await updateGarment(garment.id, {
           status: 'in_use',
           last_used: new Date().toISOString(),
-          usage_count: newUsageCount
+          usage_count: newUsageCount,
+          box_id: null // Al usar la prenda, deja de ocupar sitio en la caja
         })
 
         // 3. Registrar en historial de uso

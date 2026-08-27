@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
 import type { Garment, Box } from '@/types'
-import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
+import { getBoxMaxCapacity, getBoxAvailableSpace, isBoxFull, findMostEmptyBox, withOccupancy } from '@/utils/box-capacity'
 import { updateGarment } from '@/lib/garments-repo'
 
 const GARMENT_TYPES = [
@@ -75,28 +75,9 @@ export function EditGarmentModal({
     if (open && boxes.length > 0) {
       const loadBoxCounts = async () => {
         try {
-          const boxesWithCounts = await Promise.all(
-            boxes.map(async (box) => {
-              // Si ya tiene garment_count, usarlo
-              if (box.garment_count !== undefined) {
-                return box
-              }
-              
-              // Si no, calcularlo
-              const { count, error: countError } = await supabase
-                .from('garments')
-                .select('*', { count: 'exact', head: true })
-                .eq('box_id', box.id)
-                .eq('status', 'available')
-              
-              if (countError) {
-                console.error('Error counting garments for box:', box.id, countError)
-                return { ...box, garment_count: 0 }
-              }
-              
-              return { ...box, garment_count: count || 0 }
-            })
-          )
+          // Si el llamador ya trae los conteos, no volver a consultarlos
+          const yaTienenCuenta = boxes.every(box => box.garment_count !== undefined)
+          const boxesWithCounts = yaTienenCuenta ? boxes : await withOccupancy<Box>(boxes)
           setBoxesWithCount(boxesWithCounts)
         } catch (error) {
           console.error('Error loading box counts:', error)
@@ -210,27 +191,15 @@ export function EditGarmentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.barcode_id, garment?.id])
 
-  // Función para encontrar la caja más vacía disponible
-  const findMostEmptyBox = (): Box | null => {
-    if (!boxesWithCount || boxesWithCount.length === 0) return null
-    
-    // Filtrar cajas que no están llenas y ordenar por cantidad de prendas (ascendente)
-    const availableBoxes = boxesWithCount
-      .filter(box => !isBoxFull(box))
-      .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
-    
-    return availableBoxes.length > 0 ? availableBoxes[0] : null
-  }
-
   const handleChange = (field: string, value: any) => {
     // Si se está cambiando la caja, validar capacidad
     if (field === 'box_id' && value && value !== 'none') {
       const selectedBox = boxesWithCount.find(b => b.id === value)
       if (selectedBox && isBoxFull(selectedBox)) {
         const maxCapacity = getBoxMaxCapacity(selectedBox)
-        const mostEmptyBox = findMostEmptyBox()
+        const mostEmptyBox = findMostEmptyBox(boxesWithCount.filter(b => b.id !== value))
         if (mostEmptyBox) {
-          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}", con ${getBoxAvailableSpace(mostEmptyBox)} espacios libres.`)
         } else {
           setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
         }
@@ -396,9 +365,9 @@ export function EditGarmentModal({
           // Si se está moviendo a otra caja, verificar capacidad
           if (!isMovingToSameBox && isBoxFull(selectedBox)) {
             const maxCapacity = getBoxMaxCapacity(selectedBox)
-            const mostEmptyBox = findMostEmptyBox()
+            const mostEmptyBox = findMostEmptyBox(boxesWithCount.filter(b => b.id !== formData.box_id))
             if (mostEmptyBox) {
-              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+              setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}", con ${getBoxAvailableSpace(mostEmptyBox)} espacios libres.`)
             } else {
               setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
             }

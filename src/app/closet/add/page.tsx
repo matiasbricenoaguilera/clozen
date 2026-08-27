@@ -25,7 +25,7 @@ import { GARMENT_TYPES, SEASONS, STYLES, type GarmentSuggestion } from '@/lib/ga
 import { toast } from '@/hooks/use-toast'
 import { getFreshAccessToken } from '@/lib/session'
 import { isHeic, heicToJpeg } from '@/lib/image-format'
-import { getBoxMaxCapacity, isBoxFull } from '@/utils/box-capacity'
+import { getBoxMaxCapacity, getBoxAvailableSpace, isBoxFull, findMostEmptyBox, withOccupancy } from '@/utils/box-capacity'
 
 export default function AddGarmentPage() {
   const { userProfile, loading: authLoading } = useAuth()
@@ -174,41 +174,14 @@ export default function AddGarmentPage() {
 
       if (error) throw error
 
-      // OPTIMIZACIÓN CRÍTICA: Usar queries agregadas (count) en paralelo
-      // en lugar de traer TODOS los box_id (puede ser miles de registros)
-      const boxIds = (data || []).map((box: { id: string; name: string }) => box.id)
-      
       // Si no hay cajas, retornar vacío
-      if (boxIds.length === 0) {
+      if (!data || data.length === 0) {
         setBoxes([])
         return
       }
 
-      // OPTIMIZACIÓN: Hacer counts en paralelo por cada caja usando count(*)
-      // Esto es MUCHO más eficiente que traer todos los registros
-      const countQueries = boxIds.map((boxId: string) =>
-        supabase
-          .from('garments')
-          .select('*', { count: 'exact', head: true })
-          .eq('box_id', boxId)
-          .eq('status', 'available')
-      )
-
-      const countResults = await Promise.all(countQueries)
-
-      // Crear mapa de conteos
-      const countMap = new Map<string, number>()
-      boxIds.forEach((boxId: string, index: number) => {
-        countMap.set(boxId, countResults[index].count || 0)
-      })
-
-      // Combinar datos con conteos
-      const boxesWithCount = (data || []).map((box: any) => ({
-        ...box,
-        garment_count: countMap.get(box.id) || 0
-      }))
-
-      setBoxes(boxesWithCount)
+      // Conteo de ocupación en paralelo (queries count(*), sin traer filas)
+      setBoxes(await withOccupancy<Box>(data))
     } catch (error) {
       console.error('Error fetching boxes:', error)
       // En caso de error, mostrar array vacío
@@ -561,15 +534,10 @@ export default function AddGarmentPage() {
         const selectedBox = boxes.find(b => b.id === formData.boxId)
         if (selectedBox && isBoxFull(selectedBox)) {
           const maxCapacity = getBoxMaxCapacity(selectedBox)
-          // Encontrar la caja más vacía
-          const availableBoxes = boxes
-            .filter(box => !isBoxFull(box))
-            .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
-          
-          const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
+          const mostEmptyBox = findMostEmptyBox(boxes.filter(box => box.id !== formData.boxId))
           
           if (mostEmptyBox) {
-            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+            setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}", con ${getBoxAvailableSpace(mostEmptyBox)} espacios libres.`)
           } else {
             setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
           }
@@ -1232,15 +1200,10 @@ export default function AddGarmentPage() {
                       const selectedBox = boxes.find(b => b.id === value)
                       if (selectedBox && isBoxFull(selectedBox)) {
                         const maxCapacity = getBoxMaxCapacity(selectedBox)
-                        // Encontrar la caja más vacía
-                        const availableBoxes = boxes
-                          .filter(box => !isBoxFull(box))
-                          .sort((a, b) => (a.garment_count || 0) - (b.garment_count || 0))
-                        
-                        const mostEmptyBox = availableBoxes.length > 0 ? availableBoxes[0] : null
+                        const mostEmptyBox = findMostEmptyBox(boxes.filter(box => box.id !== value))
                         
                         if (mostEmptyBox) {
-                          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}" que tiene ${mostEmptyBox.garment_count || 0} prendas.`)
+                          setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas). Te recomendamos usar la caja "${mostEmptyBox.name}", con ${getBoxAvailableSpace(mostEmptyBox)} espacios libres.`)
                         } else {
                           setError(`❌ Esta caja está llena (máximo ${maxCapacity} prendas) y no hay otras cajas disponibles.`)
                         }

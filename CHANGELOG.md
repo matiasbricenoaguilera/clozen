@@ -45,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
 ### Fixed
+- **Una prenda retirada seguía figurando dentro de su caja**: el retiro en lote de `/closet` y el uso de un outfit recomendado no limpiaban `box_id`, mientras que el retiro individual sí
+  - Regla unificada: **al retirar, la prenda deja de ocupar sitio en la caja** (`box_id = NULL`), y se le asigna caja de nuevo al ingresar. Es lo que ya hacía `/admin/in-use` al restaurar
+  - Nuevo `LIMPIAR_CAJA_DE_PRENDAS_EN_USO.sql` para soltar la caja de las prendas que arrastran el problema
+- **La asignación por lote podía mandar prendas a una caja llena**: si ninguna caja tenía hueco, `/admin/organize` se quedaba con la caja elegida y asignaba igual
+  - Ahora la alternativa automática exige que quepan **todas** las prendas del lote (antes bastaba con un hueco libre) y, si no hay ninguna, se aborta con un mensaje que dice cuántos espacios faltan
+  - Cuando el destino cambia solo, el mensaje de éxito lo dice: "la caja que elegiste no tenía sitio para N prendas"
+- **La capacidad se validaba contra conteos en memoria** que podían llevar minutos sin refrescar: la asignación por lote y el ingreso ahora releen la ocupación de la caja justo antes de escribir
+
 - **Los cambios sobre prendas podían no guardarse sin que la app lo dijera**: al mover una prenda de caja aparecía "✅ Prenda movida exitosamente" aunque no se hubiera guardado nada
   - Causa: PostgREST responde **200 con cero filas y sin error** cuando RLS deja pasar la petición pero ninguna fila supera la política. Las 11 escrituras sobre `garments` comprobaban solo `error`, nunca cuántas filas se habían modificado
   - Nueva `lib/garments-repo.ts` con `updateGarments(ids, patch)` / `updateGarment(id, patch)`: añaden `.select('id')`, comparan las filas devueltas con los ids enviados y lanzan `GarmentUpdateError` con un mensaje mostrable ("La prenda ya no existe o tu usuario no tiene permiso para modificarla")
@@ -60,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
 ### Changed
+- **Toda la lógica de capacidad vive en `utils/box-capacity.ts`**: `countBoxOccupancy()`, `countBoxesOccupancy()`, `withOccupancy()`, `findMostEmptyBox()`, `assertBoxHasSpace()` y `BoxCapacityError`, además de las que ya estaban
+  - Eliminadas **4 implementaciones duplicadas** del conteo de prendas por caja (`/closet`, `/closet/add`, `/admin/organize` y el modal de edición) y las **3 copias divergentes** de "buscar la caja más vacía", que devolvían cajas distintas según desde dónde se llamara
+  - `findMostEmptyBox()` ordena por **espacio libre real**, no por número de prendas: una caja de 30 con 12 dentro tiene más sitio que una de 15 con 10
+  - Los mensajes de "caja llena" dicen ahora cuántos espacios libres tiene la caja recomendada, en lugar de cuántas prendas tiene
+  - Neto: ~55 líneas menos en las cuatro pantallas
 - **Actualizado Next.js de 16.1.1 a 16.3.2** y `eslint-config-next` a juego
   - Resueltas 16 vulnerabilidades de dependencias (1 crítica, 11 altas) hasta dejar `npm audit` en 0
   - Crítica: `protobufjs` (ejecución arbitraria de código) vía `@google-cloud/vision`
