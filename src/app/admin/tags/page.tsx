@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { NFCScanner } from '@/components/nfc/nfc-scanner'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +18,7 @@ type TagAssociation = {
 }
 
 export default function AdminTagsPage() {
+  const { confirmar, dialogoDeConfirmacion } = useConfirm()
   const [mode, setMode] = useState<'read' | 'write' | null>(null)
   const [writeTagId, setWriteTagId] = useState('')
   const [scannedTagId, setScannedTagId] = useState('')
@@ -92,7 +94,11 @@ export default function AdminTagsPage() {
 
   const handleClearAssociation = useCallback(async () => {
     if (!association) return
-    const confirmed = confirm(`¿Deseas liberar el tag de la ${association.entityType === 'garment' ? 'prenda' : 'caja'} "${association.entityName}"?`)
+    const confirmed = await confirmar({
+      title: '¿Liberar el tag?',
+      description: `Dejará de estar asociado a la ${association.entityType === 'garment' ? 'prenda' : 'caja'} "${association.entityName}" y podrás escribir un ID nuevo.`,
+      confirmLabel: 'Liberar tag'
+    })
     if (!confirmed) return
 
     setBusy(true)
@@ -108,7 +114,7 @@ export default function AdminTagsPage() {
     } finally {
       setBusy(false)
     }
-  }, [association])
+  }, [association, confirmar])
 
   const scannerTitle = useMemo(() => {
     if (mode === 'write') return 'Escribir nuevo ID en tag'
@@ -242,6 +248,8 @@ export default function AdminTagsPage() {
           )}
         </CardContent>
       </Card>
+
+      {dialogoDeConfirmacion}
     </div>
   )
 }

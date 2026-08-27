@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
 ### Fixed
+- **Eliminar una prenda o una caja podía no eliminar nada**: los `delete` tenían el mismo fallo silencioso que ya se corrigió en los `update` (200, sin error y sin filas cuando RLS lo rechaza)
+  - Nuevo `deleteGarment()` en `lib/garments-repo.ts` y `.select('id')` en el borrado de cajas
+- **Eliminar una caja con prendas dentro devolvía el error crudo de Postgres** (`violates foreign key constraint`): ahora se avisa antes con "todavía tiene N prenda(s) dentro"
+  - Nueva `countBoxGarments()`, que cuenta **todas** las prendas de la caja (la clave foránea bloquea el borrado también por las que están en uso)
 - **Una prenda retirada seguía figurando dentro de su caja**: el retiro en lote de `/closet` y el uso de un outfit recomendado no limpiaban `box_id`, mientras que el retiro individual sí
   - Regla unificada: **al retirar, la prenda deja de ocupar sitio en la caja** (`box_id = NULL`), y se le asigna caja de nuevo al ingresar. Es lo que ya hacía `/admin/in-use` al restaurar
   - Nuevo `LIMPIAR_CAJA_DE_PRENDAS_EN_USO.sql` para soltar la caja de las prendas que arrastran el problema
@@ -68,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Los mensajes de "caja llena" y los contadores `(n/max)` ahora muestran la capacidad real de cada caja
 
 ### Changed
+- **Eliminados los tres `confirm()` nativos que quedaban** (eliminar prenda, eliminar caja, liberar tag NFC): bloquean el hilo del navegador y con él los escáneres NFC y de cámara, que dejan de recibir eventos hasta que alguien pulsa el botón
+  - Nuevo `useConfirm()` en `components/ui/confirm-dialog.tsx`: diálogo de la propia app que devuelve una promesa, con botón destructivo en rojo y texto que dice lo que va a pasar ("Eliminar prenda", "Liberar tag")
 - **Toda la lógica de capacidad vive en `utils/box-capacity.ts`**: `countBoxOccupancy()`, `countBoxesOccupancy()`, `withOccupancy()`, `findMostEmptyBox()`, `assertBoxHasSpace()` y `BoxCapacityError`, además de las que ya estaban
   - Eliminadas **4 implementaciones duplicadas** del conteo de prendas por caja (`/closet`, `/closet/add`, `/admin/organize` y el modal de edición) y las **3 copias divergentes** de "buscar la caja más vacía", que devolvían cajas distintas según desde dónde se llamara
   - `findMostEmptyBox()` ordena por **espacio libre real**, no por número de prendas: una caja de 30 con 12 dentro tiene más sitio que una de 15 con 10

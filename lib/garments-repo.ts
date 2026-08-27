@@ -82,3 +82,34 @@ export async function updateGarments(
 export async function updateGarment(id: string, patch: GarmentPatch): Promise<void> {
   await updateGarments([id], patch)
 }
+
+/**
+ * Elimina una prenda y **verifica que se haya borrado de verdad**.
+ *
+ * Mismo motivo que en `updateGarments`: un DELETE que RLS rechaza responde 200
+ * sin error y sin filas, y la UI daría la prenda por eliminada.
+ *
+ * @throws {GarmentUpdateError} si no se eliminó ninguna fila
+ */
+export async function deleteGarment(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('garments')
+    .delete()
+    .eq('id', id)
+    .select('id')
+
+  if (error) {
+    console.error('❌ Error al eliminar la prenda:', { id, error })
+    throw new GarmentUpdateError(
+      `No se pudo eliminar la prenda: ${error.message || 'error desconocido'}`,
+      error
+    )
+  }
+
+  if (!data || data.length === 0) {
+    console.error('❌ La eliminación no afectó a ninguna prenda:', { id })
+    throw new GarmentUpdateError(
+      'La prenda no se eliminó. Ya no existe o tu usuario no tiene permiso para eliminarla.'
+    )
+  }
+}

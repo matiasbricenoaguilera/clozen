@@ -63,6 +63,27 @@ export async function countBoxOccupancy(boxId: string): Promise<number> {
 }
 
 /**
+ * Cuenta **todas** las prendas asignadas a una caja, disponibles o no.
+ *
+ * `countBoxOccupancy` sirve para la capacidad; esta es la que importa antes de
+ * borrar una caja, porque la clave foránea `garments.box_id` bloquea el DELETE
+ * mientras quede cualquier prenda apuntando a ella.
+ */
+export async function countBoxGarments(boxId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('garments')
+    .select('*', { count: 'exact', head: true })
+    .eq('box_id', boxId)
+
+  if (error) {
+    console.error('Error contando prendas de la caja:', { boxId, error })
+    throw new BoxCapacityError('No se pudo comprobar cuántas prendas hay en la caja.')
+  }
+
+  return count || 0
+}
+
+/**
  * Cuenta la ocupación de varias cajas en paralelo.
  *
  * Es mucho más barato que traer todos los `box_id` de `garments`: son queries

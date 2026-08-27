@@ -59,7 +59,14 @@ export const supabase = supabaseUrl && supabaseAnonKey && supabaseUrl.startsWith
           })
         }),
         delete: () => ({
-          eq: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
+          eq: () => Object.assign(
+            Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
+            {
+              // `deleteGarment` encadena .eq(...).select('id'); otros flujos encadenan dos .eq()
+              select: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } }),
+              eq: () => Promise.resolve({ data: null, error: { message: 'Supabase no configurado' } })
+            }
+          )
         })
       }),
       storage: {

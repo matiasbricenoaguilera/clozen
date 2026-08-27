@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { FileUpload } from '@/components/ui/file-upload'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Loader2, AlertCircle, Save, Trash2 } from 'lucide-react'
 import type { Garment, Box } from '@/types'
 import { getBoxMaxCapacity, getBoxAvailableSpace, isBoxFull, findMostEmptyBox, withOccupancy } from '@/utils/box-capacity'
-import { updateGarment } from '@/lib/garments-repo'
+import { updateGarment, deleteGarment } from '@/lib/garments-repo'
 
 const GARMENT_TYPES = [
   'camisa', 'pantalon', 'vestido', 'falda', 'chaqueta', 'abrigo',
@@ -51,6 +52,7 @@ export function EditGarmentModal({
   onSuccess
 }: EditGarmentModalProps) {
   const { userProfile } = useAuth()
+  const { confirmar, dialogoDeConfirmacion } = useConfirm()
   const [formData, setFormData] = useState({
     name: '',
     type: '',
@@ -416,16 +418,18 @@ export function EditGarmentModal({
   const handleDelete = async () => {
     if (!garment || !userProfile) return
 
-    // Confirmación doble para acciones destructivas
-    const confirmed = confirm(
-      `¿Estás seguro de eliminar la prenda "${garment.name}"?\n\n` +
-      `Esta acción eliminará:\n` +
-      `- La prenda del sistema\n` +
-      `- Su historial de uso\n` +
-      `- Su imagen (si existe)\n` +
-      `- Su tag NFC (si existe)\n\n` +
-      `Esta acción NO se puede deshacer.`
-    )
+    // Confirmación para una acción destructiva (sin `confirm()` nativo: bloquea los escáneres)
+    const confirmed = await confirmar({
+      title: `¿Eliminar la prenda "${garment.name}"?`,
+      description:
+        'Se eliminarán también:\n' +
+        '· Su historial de uso\n' +
+        '· Su imagen (si existe)\n' +
+        '· Su tag NFC (si existe)\n\n' +
+        'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar prenda',
+      destructive: true
+    })
 
     if (!confirmed) return
 
@@ -486,12 +490,7 @@ export function EditGarmentModal({
       }
 
       // 4. Eliminar la prenda (esto elimina automáticamente usage_history por CASCADE)
-      const { error: deleteError } = await supabase
-        .from('garments')
-        .delete()
-        .eq('id', garment.id)
-
-      if (deleteError) throw deleteError
+      await deleteGarment(garment.id)
 
       console.log('✅ Prenda eliminada exitosamente:', garment.id)
 
@@ -733,6 +732,8 @@ export function EditGarmentModal({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      {dialogoDeConfirmacion}
     </Dialog>
   )
 }

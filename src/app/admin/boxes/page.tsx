@@ -14,9 +14,11 @@ import { DemoBanner } from '@/components/ui/demo-banner'
 import { Plus, Package, Edit, Trash2, Smartphone, AlertCircle } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import type { Box } from '@/types'
-import { DEFAULT_BOX_CAPACITY, getBoxMaxCapacity } from '@/utils/box-capacity'
+import { DEFAULT_BOX_CAPACITY, getBoxMaxCapacity, countBoxGarments } from '@/utils/box-capacity'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 export default function AdminBoxesPage() {
+  const { confirmar, dialogoDeConfirmacion } = useConfirm()
   const { userProfile } = useAuth()
   const [boxes, setBoxes] = useState<Box[]>([])
   const [loading, setLoading] = useState(true)
@@ -178,7 +180,13 @@ export default function AdminBoxesPage() {
   }
 
   const handleDelete = async (boxId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta caja?')) return
+    const confirmed = await confirmar({
+      title: '¿Eliminar la caja?',
+      description: 'La caja desaparecerá del sistema. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar caja',
+      destructive: true
+    })
+    if (!confirmed) return
 
     // En modo demo, mostrar mensaje
     if (!isSupabaseConfigured) {
@@ -190,6 +198,17 @@ export default function AdminBoxesPage() {
     }
 
     try {
+      // La FK garments.box_id impide borrar una caja con prendas dentro:
+      // avisar antes en vez de dejar que Postgres devuelva su error crudo
+      const prendasDentro = await countBoxGarments(boxId)
+      if (prendasDentro > 0) {
+        setError(
+          `No se puede eliminar la caja: todavía tiene ${prendasDentro} prenda(s) dentro. ` +
+            'Muévelas a otra caja desde Organizar y vuelve a intentarlo.'
+        )
+        return
+      }
+
       // Primero eliminar el registro NFC si existe
       await supabase
         .from('nfc_tags')
@@ -197,13 +216,19 @@ export default function AdminBoxesPage() {
         .eq('entity_type', 'box')
         .eq('entity_id', boxId)
 
-      // Luego eliminar la caja
-      const { error } = await supabase
+      // Luego eliminar la caja (con `.select()` para confirmar que se borró)
+      const { data: deleted, error } = await supabase
         .from('boxes')
         .delete()
         .eq('id', boxId)
+        .select('id')
 
       if (error) throw error
+
+      if (!deleted || deleted.length === 0) {
+        throw new Error('La caja no se eliminó. Ya no existe o tu usuario no tiene permiso para eliminarla.')
+      }
+
       await fetchBoxes()
     } catch (error: any) {
       setError(error.message || 'Error al eliminar la caja')
@@ -505,6 +530,8 @@ export default function AdminBoxesPage() {
           ))}
         </div>
       )}
+
+      {dialogoDeConfirmacion}
     </div>
   )
 }
