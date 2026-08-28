@@ -45,6 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Purgados del historial de Git los volcados de traza** `Trace-*.json` (~130MB): contenían la API key de OpenWeatherMap y la URL del proyecto Supabase
 
 ### Fixed
+- **Cancelar una lectura NFC no cancelaba nada**: `cancelNFC()` creaba un `NDEFReader` **nuevo** y le llamaba a `stop()`, con lo que detenía ese objeto recién creado y no el que estaba escuchando
+  - El lector seguía vivo hasta su timeout de 30 s: si acercabas un tag después, la lectura llegaba al `onSuccess` del flujo que creías cerrado (escaneabas para ingresar y la prenda se retiraba)
+  - Ahora la lectura en curso queda registrada y se detiene de verdad, con `scan({ signal })` y un `AbortController`
+- **Cerrar el diálogo del escáner tampoco detenía el lector**: `NFCScanner` no tenía limpieza al desmontar, aunque el escáner de cámara sí la tuviera. Ahora la incorpora
+- **Dos lectores NFC podían escuchar a la vez y repartirse el mismo tag**: pasaba en `/admin/organize` (escáner continuo del lote + escáner de caja) y en el diálogo *Ingresar Prenda* de `/closet` (prenda + caja)
+  - Web NFC no distingue lectores: los dos recibían el evento y cada uno lo entregaba a un flujo distinto. Como cada `NFCScanner` monta su propio `useNFC`, ahora un registro a nivel de módulo garantiza **un solo lector activo**: el que arranca después detiene al anterior
+  - Una lectura detenida a propósito ya no se muestra como error
+- **El escáner de cámara usaba un id de DOM fijo** (`barcode-reader`): dos instancias en la misma pantalla se habrían peleado por el mismo `<div>`. Ahora cada una genera el suyo con `useId()`
+- **El modo continuo perdía tags**: entre lectura y lectura esperaba 1 s "para dar tiempo de limpieza". Con el escaneo abortable esa espera baja a 300 ms, y ya no se reanuda si el componente se desmontó durante la pausa
 - **Un tag NFC se encontraba o no según la pantalla desde la que se escaneara**: `findEntityByNFCTag()` consultaba el tag tal y como llegaba del lector, sin `trim()` ni mayúsculas, mientras que los códigos se guardan normalizados desde el alta
   - Ahora busca probando las variantes del código (literal, sin espacios y en mayúsculas), así que encuentra también los registros antiguos que quedaron sin normalizar
   - Nueva `normalizeNFCTag()` exportada desde `utils/nfc.ts`; asociar un tag y registrarlo en `nfc_tags` guardan siempre la forma normalizada

@@ -4,6 +4,28 @@ import { useState, useCallback, useEffect } from 'react'
 import { NFCReadResult, NFCWriteResult } from '@/types'
 import { supabase } from '@/lib/supabase'
 
+/**
+ * Lectura NFC en curso, a nivel de módulo.
+ *
+ * Web NFC no distingue lectores: si dos `NDEFReader` están escaneando a la vez,
+ * los dos reciben el mismo tag y cada uno lo entrega a un flujo distinto (la
+ * prenda acaba a la vez retirada y asignada a una caja). Como cada `NFCScanner`
+ * monta su propio `useNFC`, hace falta este registro compartido para garantizar
+ * que solo hay un lector activo en la página.
+ */
+let lecturaActiva: { detener: (motivo: string) => void } | null = null
+
+/** Detiene de verdad la lectura en curso, si la hay */
+function detenerLecturaActiva(motivo: string) {
+  const enCurso = lecturaActiva
+  lecturaActiva = null
+
+  if (enCurso) {
+    console.log('📱 NFC: se detiene la lectura anterior —', motivo)
+    enCurso.detener(motivo)
+  }
+}
+
 export function useNFC() {
   const [isSupported, setIsSupported] = useState(false)
   const [isReading, setIsReading] = useState(false)
@@ -294,6 +316,9 @@ export function useNFC() {
       }
     }
 
+    // Solo puede haber un lector activo: el que llegue después manda
+    detenerLecturaActiva('otro lector tomó el control')
+
     setIsReading(true)
 
     // ✅ Guardar referencia al NDEFReader para poder detenerlo
@@ -301,11 +326,15 @@ export function useNFC() {
     let timeoutId: NodeJS.Timeout | null = null
     let resolved = false // ✅ Flag para prevenir múltiples resoluciones
 
+    // `scan({ signal })` es la única forma de cancelar de verdad: sin esto, el
+    // lector sigue escuchando aunque se cierre el diálogo que lo abrió
+    const abortarEscaneo = new AbortController()
+
     try {
       // @ts-ignore - Web NFC API types
       ndef = new NDEFReader()
 
-      await ndef.scan()
+      await ndef.scan({ signal: abortarEscaneo.signal })
 
       return new Promise((resolve) => {
         const resolveOnce = (result: NFCReadResult, source: string) => {
@@ -315,10 +344,18 @@ export function useNFC() {
           
           // ✅ ESTABLECER flag ANTES de hacer cualquier otra cosa (crítico para prevenir race conditions)
           resolved = true
-          
+
+          // Esta lectura deja de ser la activa
+          if (lecturaActiva === registro) {
+            lecturaActiva = null
+          }
+
           // Limpiar antes de resolver
           try { 
             ndef?.stop() 
+          } catch {}
+          try {
+            abortarEscaneo.abort()
           } catch {}
           if (timeoutId) clearTimeout(timeoutId)
           
@@ -330,6 +367,14 @@ export function useNFC() {
           
           resolve(result)
         }
+
+        // Queda registrada para que otro lector —o el botón de cancelar, o
+        // cerrar el diálogo— pueda detenerla de verdad
+        const registro = {
+          detener: (motivo: string) =>
+            resolveOnce({ success: false, error: motivo, cancelled: true }, 'cancelado')
+        }
+        lecturaActiva = registro
 
         ndef.onreading = async (event: any) => {
           try {
@@ -611,6 +656,7 @@ export function useNFC() {
     } catch (error) {
       // ✅ Detener el NDEFReader si hay error al iniciar
       try { ndef?.stop() } catch {}
+      try { abortarEscaneo.abort() } catch {}
       if (timeoutId) clearTimeout(timeoutId)
       return {
         success: false,
@@ -629,6 +675,10 @@ export function useNFC() {
         error: 'Web NFC no está soportado en este navegador'
       }
     }
+
+    // Escribir mientras hay una lectura escuchando confunde al lector: el mismo
+    // acercamiento dispara la lectura y la escritura
+    detenerLecturaActiva('se va a escribir en el tag')
 
     setIsWriting(true)
 
@@ -706,19 +756,12 @@ export function useNFC() {
 
   // Cancelar operaciones NFC
   const cancelNFC = useCallback(async () => {
-    try {
-      // @ts-ignore - Web NFC API types
-      if ('NDEFReader' in window) {
-        // @ts-ignore
-        const ndef = new NDEFReader()
-        await ndef.stop()
-      }
-    } catch (error) {
-      console.error('Error al cancelar NFC:', error)
-    } finally {
-      setIsReading(false)
-      setIsWriting(false)
-    }
+    // Antes se creaba un NDEFReader nuevo y se le llamaba a stop(): eso detiene
+    // el objeto recién creado, no el que estaba escuchando, así que el lector
+    // seguía vivo y entregaba la siguiente lectura a un flujo ya cerrado
+    detenerLecturaActiva('lectura cancelada')
+    setIsReading(false)
+    setIsWriting(false)
   }, [])
 
   return {

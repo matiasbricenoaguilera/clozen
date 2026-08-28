@@ -9,6 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Smartphone, AlertCircle, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 
+/**
+ * Pausa entre lecturas en modo continuo. Antes era 1 s "para dar tiempo de
+ * limpieza": con el escaneo abortable ya no hace falta, y esa ventana ciega
+ * hacía perder tags si se pasaban rápido.
+ */
+const PAUSA_ENTRE_LECTURAS_MS = 300
+
 interface NFCScannerProps {
   mode: 'read' | 'write'
   onSuccess: (tagId: string) => void
@@ -39,6 +46,7 @@ export function NFCScanner({
   const [detectedTagId, setDetectedTagId] = useState('')
   const [supportInfo, setSupportInfo] = useState<any>(null)
   const isScanningRef = useRef(false) // Prevenir múltiples escaneos simultáneos
+  const montadoRef = useRef(true) // No reanudar el escaneo continuo tras desmontar
   const autoStartedRef = useRef(false) // Prevenir inicio automático múltiple
   const lastSuccessTimeRef = useRef<number>(0) // Rastrear tiempo del último éxito para ignorar errores falsos
 
@@ -47,6 +55,17 @@ export function NFCScanner({
     const info = getNFCSupportInfo()
     setSupportInfo(info)
   }, [getNFCSupportInfo])
+
+  // Al desmontar —cerrar el diálogo, cambiar de pantalla— se detiene el lector.
+  // Sin esto seguía escuchando y entregaba la siguiente lectura al flujo cerrado
+  useEffect(() => {
+    montadoRef.current = true
+    return () => {
+      montadoRef.current = false
+      isScanningRef.current = false
+      cancelNFC()
+    }
+  }, [cancelNFC])
 
   // ✅ Iniciar escaneo automáticamente si está en modo continuo
   useEffect(() => {
@@ -80,18 +99,25 @@ export function NFCScanner({
           
           // ✅ Si está en modo continuo, automáticamente reiniciar escaneo
           if (continuous) {
-            // Esperar más tiempo antes de reiniciar para asegurar que el NDEFReader anterior esté completamente detenido
+            // Pausa corta entre tags: la lectura anterior ya se abortó con su
+            // AbortController, así que no hace falta esperar a que "se suelte"
             setTimeout(() => {
+              if (!montadoRef.current) return
               isScanningRef.current = false
               setStatus('scanning')
               setDetectedTagId('')
               setInfoMessage('')
               handleStartScan()
-            }, 1000) // Aumentado de 500ms a 1000ms para dar más tiempo de limpieza
+            }, PAUSA_ENTRE_LECTURAS_MS)
           } else {
             isScanningRef.current = false
             setStatus('success')
           }
+        } else if (result.cancelled) {
+          // La lectura se detuvo a propósito (cancelar, cerrar el diálogo u otro
+          // lector tomando el control): no es un error que mostrar
+          isScanningRef.current = false
+          setStatus('idle')
         } else {
           // ✅ Solo llamar onError si no hubo un éxito muy reciente (< 200ms)
           const timeSinceLastSuccess = Date.now() - lastSuccessTimeRef.current
@@ -111,13 +137,14 @@ export function NFCScanner({
           if (continuous) {
             // Reiniciar después de un breve momento
             setTimeout(() => {
+              if (!montadoRef.current) return
               isScanningRef.current = false
               setStatus('scanning')
               setErrorMessage('')
               setDetectedTagId('')
               setInfoMessage('')
               handleStartScan()
-            }, isRecentSuccess ? 1000 : 1000) // Mismo tiempo para ambos casos
+            }, PAUSA_ENTRE_LECTURAS_MS)
           } else if (!isRecentSuccess) {
             // Solo mostrar error si no es reciente
             isScanningRef.current = false

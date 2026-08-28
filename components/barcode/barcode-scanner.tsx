@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useId, useRef, useState, useCallback } from 'react'
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -27,6 +27,10 @@ export function BarcodeScanner({
   const [error, setError] = useState('')
   const [cameraId, setCameraId] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(false) // ✅ Prevenir múltiples inicializaciones
+  // html5-qrcode monta el vídeo dentro del elemento con este id. Era una
+  // constante, así que dos escáneres en la misma pantalla se peleaban por el
+  // mismo <div> y el segundo se quedaba con el vídeo del primero
+  const idContenedor = `barcode-reader-${useId().replace(/:/g, '')}`
   const scannerRef = useRef<Html5Qrcode | null>(null)
   const lastScannedCodeRef = useRef<string>('')
   const lastScanTimeRef = useRef<number>(0)
@@ -57,7 +61,7 @@ export function BarcodeScanner({
     
     // Forzar liberación de todos los tracks de video/cámara
     try {
-      const videoElement = document.querySelector('#barcode-reader video') as HTMLVideoElement
+      const videoElement = document.querySelector(`#${idContenedor} video`) as HTMLVideoElement
       if (videoElement && videoElement.srcObject) {
         const stream = videoElement.srcObject as MediaStream
         stream.getTracks().forEach(track => {
@@ -86,7 +90,7 @@ export function BarcodeScanner({
     } catch (err) {
       console.error('Error liberando todos los streams:', err)
     }
-  }, [])
+  }, [idContenedor])
 
   // Detener escáner al desmontar
   useEffect(() => {
@@ -134,7 +138,7 @@ export function BarcodeScanner({
       
       // Crear instancia del escáner
       console.log('🎥 Creando nueva instancia de Html5Qrcode...')
-      const html5QrCode = new Html5Qrcode('barcode-reader')
+      const html5QrCode = new Html5Qrcode(idContenedor)
       scannerRef.current = html5QrCode
 
       // Obtener lista de cámaras disponibles
@@ -314,7 +318,7 @@ export function BarcodeScanner({
 
       <div className="relative">
         <div
-          id="barcode-reader"
+          id={idContenedor}
           className="w-full rounded-lg overflow-hidden bg-black"
           style={{ minHeight: '300px' }}
         />

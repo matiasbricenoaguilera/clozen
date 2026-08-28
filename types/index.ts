@@ -106,6 +106,8 @@ export interface NFCReadResult {
   ndefHexRecords?: string[]
   ndefRecordCount?: number
   selectedSource?: 'serial' | 'utf8-1' | 'utf8-2' | 'hex' | null
+  /** La lectura se detuvo a propósito (el usuario canceló u otro lector tomó el control) */
+  cancelled?: boolean
 }
 
 export interface NFCWriteResult {
